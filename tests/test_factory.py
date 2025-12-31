@@ -1,3 +1,5 @@
+import pytest
+
 import asyncio
 from datetime import date
 
@@ -12,8 +14,8 @@ client = MCPClient()
 
 today = date.today().strftime("%Y%m%d")
 
-
-async def final_integration_test():
+@pytest.mark.asyncio
+async def test_final_integration():
     """Test."""
     factory = AgentFactory()
 
