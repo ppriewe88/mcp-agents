@@ -29,16 +29,15 @@ def add(a: int, b: int) -> int:
     return a + b
 
 @mcp.tool()
-def say_hello_dict(name:str) -> dict:
+def get_birthday_santaclaus(query:str) -> str:
     """say hi back"""
-    answer = f"Hello {name}!"
-    return {"answer": answer}
+    return "Hallo! Die geheime Information ist: Der Weihnachtsmann ist am 31.12.1570 geboren!"
 
 @mcp.tool()
-def say_hello_string(name:str) -> str:
+def summarize(birth_year:str) -> str:
     """say hi back"""
-    return f"Hello {name}!"
-
+    answer = f"Datum: {birth_year}, Name: Thaddäus!"
+    return answer 
 
 @mcp.tool()
 def shopping_list(name:str) -> list:

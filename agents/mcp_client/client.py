@@ -11,7 +11,7 @@ from mcp.shared.exceptions import McpError
 from mcp.types import CallToolResult, TextContent
 
 from agents.mcp_client.abstract import BaseMCPClient
-from agents.mcp_client.models import (
+from agents.models.client import (
     MCPError,
     MCPErrorCode,
     MCPTool,

@@ -3,7 +3,7 @@ from typing import List
 
 from mcp.types import CallToolResult
 
-from agents.mcp_client.models import MCPToolDecision, OpenAITool
+from agents.models.client import MCPToolDecision, OpenAITool
 
 
 class BaseMCPClient(ABC):
