@@ -1,55 +1,52 @@
 {
-    // git settings
-    "git.ignoreLimitWarning": true,
-    // python settings
-    "python.defaultInterpreterPath": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
-    "python.testing.pytestEnabled": true,
-    "python.testing.pytestPath": "${workspaceFolder}/.venv/bin/pytest",
-    "python.testing.pytestArgs": [
-        "--no-cov"
-    ],
-    // editor settings
-    "editor.formatOnPaste": false,
-    "editor.formatOnSave": true,
-    "editor.formatOnType": true,
-    "editor.codeActionsOnSave": {
-        "source.organizeImports": "always",
-        "source.fixAll": "always"
-    },
-    // VSCode performance improvements
-    "files.watcherExclude": {
-        "**/.git/objects/**": true,
-        "**/.git/subtree-cache/**": true,
-        "**/node_modules/*/**": true,
-        "**/.hg/store/**": true,
-        "**/**/*.pyc": true,
-        "**/__pycache__": true,
-        ".mypy_cache/**": true,
-        ".pytest_cache/**": true,
-        ".ruff_cache/**": true,
-        ".venv/**": true
-    },
-    "search.exclude":{
-        "**/__pycache__": true,
-        ".mypy_cache/**": true,
-        ".pytest_cache/**": true,
-        ".ruff_cache/**": true,
-        ".venv/**": true
-    },
-    "files.exclude":{
-        "**/__pycache__": true,
-        ".mypy_cache/**": true,
-        ".pytest_cache/**": true,
-        ".ruff_cache/**": true,
-        ".venv/**": true
-    },
-    // ruff settings
-    "ruff.path": [
-        "${workspaceFolder}/.venv/bin/ruff"
-    ],
-    "[python]": {
-        "editor.defaultFormatter": "charliermarsh.ruff"
-    },
-    // spell correction
-    "cSpell.enabled": false
+  // git settings
+  "git.ignoreLimitWarning": true,
+  // python settings
+  "python.defaultInterpreterPath": "${workspaceFolder}\\.venv\\Scripts\\python.exe",
+  "python.testing.pytestEnabled": true,
+  "python.testing.pytestPath": "${workspaceFolder}/.venv/bin/pytest",
+  "python.testing.pytestArgs": ["--no-cov"],
+  // editor settings
+  "editor.formatOnPaste": false,
+  "editor.formatOnSave": true,
+  "editor.formatOnType": true,
+  "editor.codeActionsOnSave": {
+    "source.organizeImports": "always",
+    "source.fixAll": "always"
+  },
+  // VSCode performance improvements
+  "files.watcherExclude": {
+    "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true,
+    "**/node_modules/*/**": true,
+    "**/.hg/store/**": true,
+    "**/**/*.pyc": true,
+    "**/__pycache__": true,
+    ".mypy_cache/**": true,
+    ".pytest_cache/**": true,
+    ".ruff_cache/**": true,
+    ".venv/**": true
+  },
+  "search.exclude": {
+    "**/__pycache__": true,
+    ".mypy_cache/**": true,
+    ".pytest_cache/**": true,
+    ".ruff_cache/**": true,
+    ".venv/**": true
+  },
+  "files.exclude": {
+    "**/__pycache__": true,
+    ".mypy_cache/**": true,
+    ".pytest_cache/**": true,
+    ".ruff_cache/**": true,
+    ".venv/**": true
+  },
+  // ruff settings
+  "ruff.path": ["${workspaceFolder}/.venv/bin/ruff"],
+  "[python]": {
+    "editor.defaultFormatter": "charliermarsh.ruff"
+  },
+  // spell correction
+  "cSpell.enabled": false,
+  "workbench.colorTheme": "Default Dark Modern"
 }
