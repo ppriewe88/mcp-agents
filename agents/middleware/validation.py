@@ -28,7 +28,7 @@ class ValidationOutput(BaseModel):
     """Type for output of validation."""
 
     usable: bool = Field(
-        ..., description="True or false according to instructions in system prompt." # "True if the agent answer expresses missing inputs for tool calls."
+        ..., description="True or false according to instructions in system prompt."
     )
     reasoning: str = Field(..., description="Short reasoning why the answer is usable or not.")
 

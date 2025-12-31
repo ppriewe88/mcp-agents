@@ -67,3 +67,4 @@ class PromptMarkers(str, Enum):
 
 class MiscMarkers(str, Enum):
     NO_EXTRACTIONS_FOUND = "no extractions found in text"
+    POSTPROCESSING_ERRORMARKER = "TOOL_ERROR"

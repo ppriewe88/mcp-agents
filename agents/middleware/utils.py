@@ -3,8 +3,7 @@ from typing import List
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from pydantic import BaseModel
 
-from agents.config import POSTPROCESSING_ERROR_MARKER
-from agents.models.agents import AbortionCodes, LoopStatus
+from agents.models.agents import AbortionCodes, LoopStatus, MiscMarkers
 
 
 class DetectedStatus(BaseModel):
@@ -68,7 +67,10 @@ def detect_loop_status(
     # last message is ToolMessage, and contains error markers
     # OCCURS, when mcp toolcall was errorfull and marked by postprocessor
     # NOTICE: Last message = current message, when middleware AbortOnToolErrors is active!
-    if isinstance(last_message, ToolMessage) and last_message.content == POSTPROCESSING_ERROR_MARKER:
+    if (
+        isinstance(last_message, ToolMessage)
+        and last_message.content == MiscMarkers.POSTPROCESSING_ERRORMARKER.value
+    ):
         return DetectedStatus(
             type = LoopStatus.ABORTED,
             abortion_code = AbortionCodes.TOOL_ERROR)

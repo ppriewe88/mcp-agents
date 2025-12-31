@@ -8,6 +8,7 @@ from mcp.types import CallToolResult, TextContent
 
 from agents.mcp_client.abstract import BaseMCPClient
 from agents.mcp_client.client import MCPClient
+from agents.models.agents import MiscMarkers
 from agents.models.client import MCPToolDecision
 from agents.models.tools import (
     DROP_EMPTY_DEFAULTS_MARKER,
@@ -284,6 +285,13 @@ class MCPToolContainer:
             tool_result: CallToolResult = result_list[0]
             logger.info(f"[TOOL RESULT] {schema.name_for_llm} received raw MCP response")
             assert isinstance(tool_result.content[0], TextContent)
+
+            if tool_result.isError:
+                logger.error(
+                    f"[TOOL ERROR] {schema.name_for_llm} MCP toolcall resulted in error: "
+                    f"{tool_result.content[0].text}"
+                )
+                return MiscMarkers.POSTPROCESSING_ERRORMARKER.value
 
             return tool_result.content[0].text
 

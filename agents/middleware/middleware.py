@@ -18,6 +18,7 @@ from langchain.tools import tool
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.runtime import Runtime
 
+from agents import configure_logging
 from agents.middleware.prompts import (
     SYSTEM_PROMPT_VALIDATOR_USABILITY,
 )
@@ -34,8 +35,9 @@ from agents.models.agents import (
 )
 from agents.models.extended_state import CustomStateShared
 
+configure_logging(level=logging.INFO)
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+
 
 ############################################################### Log before and after model calls
 class LoggingMiddlewareSync(AgentMiddleware):
@@ -43,7 +45,7 @@ class LoggingMiddlewareSync(AgentMiddleware):
 
     def before_model(self, state: AgentState, runtime: Runtime) -> dict[str, Any] | None:
         """Logs before model calls."""
-        logger.debug("Agent call: model node")
+        logger.info("Agent call: model node")
         return None
 
     def after_model(self, state: AgentState, runtime: Runtime) -> dict[str, Any] | None:
@@ -51,13 +53,13 @@ class LoggingMiddlewareSync(AgentMiddleware):
         messages: List[HumanMessage | AIMessage | ToolMessage] = state["messages"]  # type: ignore[assignment]
         last_message = messages[-1]
         detected: DetectedStatus = detect_loop_status(messages)
-        logger.debug(f"Agent (model node) response: {detected.type.value}")
+        logger.info(f"Agent (model node) response: {detected.type.value}")
         if detected.abortion_code:
-            logger.debug(f"Abortion code: {detected.type.value}")
+            logger.info(f"Abortion code: {detected.type.value}")
         if detected.type == LoopStatus.TOOLCALL_REQUEST:
             assert hasattr(last_message, "tool_calls")
             for toolcall in last_message.tool_calls:
-                    logger.debug(f"Requested toolcall: {toolcall['name']}")
+                logger.info(f"Requested toolcall: {toolcall['name']}")
         return None
 
 ############################################################### evaluate toolcalls for error handling
@@ -80,9 +82,9 @@ class AbortOnToolErrors(AgentMiddleware):
         detected = detect_loop_status(messages)
         if detected.type == LoopStatus.ABORTED and detected.abortion_code == AbortionCodes.TOOL_ERROR:
             last_message = state["messages"][-1]
-            logger.debug(
-                    f"Postprocessed MCP Tool result of {last_message.name} is unfixable error! Jump to end!"
-                )
+            logger.info(
+                f"Postprocessed MCP Tool result of {last_message.name} is unfixable error! Jump to end!"
+            )
             return {
                 "toolcall_error": True,
                 "error_toolname": f"{last_message.name}",
@@ -110,7 +112,7 @@ class ModelCallCounterMiddlewareSync(AgentMiddleware[CustomStateShared]):
             dict[str, Any] | None: Updated state containing the incremented model_call_count, or None if unchanged.
         """
         count: int = state.get("model_call_count") or 0
-        logger.debug(f"Current count of model calls (after model node): {count + 1}")
+        logger.info(f"Current count of model calls (after model node): {count + 1}")
         return {"model_call_count": count + 1}
 
 ############################################################### Count Modelcalls
@@ -142,7 +144,7 @@ class OnlyOneModelCallMiddlewareSync(AgentMiddleware[CustomStateShared]):
             otherwise None to continue execution.
         """
         count: int = state.get("model_call_count") or 0
-        logger.debug(f"Current count of model calls (before model node): {count}")
+        logger.info(f"Current count of model calls (before model node): {count}")
         if count >= 1:
             return {
                 "model_call_limit_reached": True,
@@ -212,7 +214,9 @@ def override_final_agentprompt_async(
         ### DIRECT ANSWER WITHOUT PRIOR TOOLCALLS
         if next_type == LoopStatus.DIRECT_ANSWER and direct_answer_prompt is not None:
             new_prompt = SystemMessage(content=direct_answer_prompt)
-            logger.debug(f"Agent is answering directly (no prior toolcalls), switched direct_answer prompt: {bool(direct_answer_prompt)}")
+            logger.info(
+                f"Agent is answering directly (no prior toolcalls), switched direct_answer prompt: {bool(direct_answer_prompt)}"
+            )
             remade_response = await handler(request.override(system_message=new_prompt)) # type: ignore[misc]
             assert isinstance(remade_response.result, list)
             assert isinstance(remade_response.result[0], AIMessage)
@@ -221,7 +225,7 @@ def override_final_agentprompt_async(
 
         ### FINAL ANSWER WITH PRIOR TOOLCALLS
         if next_type == LoopStatus.TOOL_BASED_ANSWER:
-            logger.debug("Agent is answering with prior toolcalls made, switch prompt")
+            logger.info("Agent is answering with prior toolcalls made, switch prompt")
             new_prompt = SystemMessage(content=toolbased_answer_prompt)
             remade_response = await handler(request.override(system_message=new_prompt))  # type: ignore[misc]
             remade_response.result[0].response_metadata["used_prompt"] = PromptMarkers.TOOLBASED_ANSWER.value
