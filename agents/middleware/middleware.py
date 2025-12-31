@@ -346,7 +346,7 @@ if __name__ == "__main__":
     import asyncio
 
     ########################################################################## AGENT
-    from agents.openai.client import model
+    from agents.llm.client import model
     # get llm instance
     llm = model
 
