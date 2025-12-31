@@ -20,5 +20,5 @@ dist/
 .env
 
 # --- IDE ---
-.vscode/
+# .vscode/
 .idea/

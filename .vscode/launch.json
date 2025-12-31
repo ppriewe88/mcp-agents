@@ -1,0 +1,30 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Python: Current File (Poetry .venv)",
+      "type": "python",
+      "python": "${workspaceFolder}/.venv/Scripts/python.exe",
+      "request": "launch",
+      "program": "${file}",
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Python: FastAPI",
+      "type": "python",
+      "request": "launch",
+      "python": "${workspaceFolder}/.venv/Scripts/python.exe",
+      "module": "uvicorn",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/src/api/", 
+        "PYDEVD_DISABLE_FILE_VALIDATION": "1"
+      },
+      "envFile": "${workspaceFolder}/.env",
+      "args": ["src.api.server:app", "--reload", "--port", "8081"],
+      "jinja": true,
+      "justMyCode": true
+    },
+  ]
+}
