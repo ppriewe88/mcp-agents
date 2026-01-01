@@ -30,10 +30,8 @@ mcp = FastMCP(
     This is a longer placeholder text. Lorem ipsum dolor sit amet, consectetur adipiscing elit.
     Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.""",)
 def add_typed(a: Annotated[int, Field(..., 
-                   title = "first operand",
                    description="The first number to add")], 
         b: Annotated[int, Field(..., 
-                   title = "second operand",
                    description="The second number to add")] = 2) -> int:
     """Add two numbers together"""
     return a + b

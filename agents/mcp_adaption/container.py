@@ -32,10 +32,8 @@ class MCPToolContainer:
     def __init__(
         self,
         schemas: List[ToolSchema],
-        mcp_client: Optional[BaseMCPClient] = None,
     ):
         # state for tools and execution
-        self.mcp_client = mcp_client or MCPClient()
         self.tools_agent = {}
         self.tools_raw = {}
 
@@ -247,7 +245,6 @@ class MCPToolContainer:
             Returns: string
             """
             self = args[0]
-            mcp_client = self.mcp_client
 
             ###################### start with info logging
 
@@ -272,6 +269,7 @@ class MCPToolContainer:
             logger.info(f"[TOOL MAP] {schema.name_for_llm} LLM→SERVER = {constructed_server_args}")
 
             ###################### call mcp tool
+            mcp_client = MCPClient(mcp_server_endpoint=schema.server_url)
             await mcp_client.connect()
 
             toolcall = MCPToolDecision(
@@ -321,9 +319,6 @@ class MCPToolContainer:
 if __name__ == "__main__":
     # 000301450224 000301918893
     from agents.mcp_adaption.schemas import schema_add
-    from agents.mcp_client.client import MCPClient
-
-    client = MCPClient()
 
     async def debug():
         """Test."""
@@ -332,7 +327,6 @@ if __name__ == "__main__":
             schemas=[
                 schema_add
             ],
-            mcp_client=client,
         )
 
         ############################################################################## SFK
@@ -354,7 +348,6 @@ if __name__ == "__main__":
             schemas=[
                 schema_add
             ],
-            mcp_client=client,
         )
 
         ############################################################################## SFK

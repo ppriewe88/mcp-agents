@@ -5,7 +5,8 @@ from agents.models.tools import (
 )
 
 schema_add = ToolSchema(
-    name_on_server="add",
+    server_url="http://127.0.0.1:8000/sse",
+    name_on_server="add_numbers",
     name_for_llm="add",
     description_for_llm="",
     args_schema=ToolArgsSchema(
@@ -28,6 +29,7 @@ schema_add = ToolSchema(
 )
 
 schema_birthday = ToolSchema(
+    server_url="http://127.0.0.1:8001/sse",
     name_on_server="get_birthday_santaclaus",
     name_for_llm="geburtsjahr_weihnachtsmann_ermitteln",
     description_for_llm="liefert das geburtsjahr des weihnachtsmannes",
@@ -45,6 +47,7 @@ schema_birthday = ToolSchema(
 )
 
 schema_more_info_on_santa = ToolSchema(
+    server_url="http://127.0.0.1:8000/sse",
     name_on_server="summarize",
     name_for_llm="weitere_infos_weihnachtsmann",
     description_for_llm="""liefert weitere informationen zum weihnachtsmann. 

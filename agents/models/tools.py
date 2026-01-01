@@ -43,6 +43,7 @@ class ToolArgsSchema(BaseModel):
 class ToolSchema(BaseModel):
     """Client-side schema definition for specific mcp tool."""
 
+    server_url: Optional[str] = "http://127.0.0.1:8000/sse"
     name_on_server: str
     name_for_llm: str
     description_for_llm: str
