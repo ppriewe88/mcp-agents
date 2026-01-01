@@ -148,19 +148,9 @@ class MCPClient(BaseMCPClient):
         """Get list of tools from mcp server. Converts them into OpenAI-suitable format."""
         available_tools: List[OpenAITool] = []
 
-        # raise if no session active
-        if self.session is None:
-            logger.error(
-                f"{MCPErrorCode.UNKNOWN}. Getting tools from MCP server failed, as connection dead.",
-                exc_info=False,
-            )
-            raise MCPError(
-                "MCP connection failed due to unknown reason.",
-                code=MCPErrorCode.UNKNOWN,
-            )
-
         # retrieve tools from server. If empty return, log, and return empty
         try:
+            await self.connect()
             tools_result = await self.session.list_tools()
             if tools_result.tools:
                 for tool in tools_result.tools:
@@ -181,6 +171,7 @@ class MCPClient(BaseMCPClient):
 
             # log success, return
             logger.debug("Successfully fetched tools from mcp server")
+            await self.close()
             return available_tools
 
         # error handling. No return

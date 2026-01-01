@@ -13,6 +13,7 @@ logger.setLevel(logging.INFO)
 load_dotenv()
 MCP_SERVER_ENDPOINT: str = os.getenv("MCP_SERVER_ENDPOINT", "http://127.0.0.1:8000")
 
+
 # Create an MCP server
 mcp = FastMCP(
     name="dummy_server",

@@ -12,19 +12,22 @@
       "cwd": "${workspaceFolder}"
     },
     {
-      "name": "Python: FastAPI",
+      "name": "FastAPI (module)",
       "type": "python",
       "request": "launch",
-      "python": "${workspaceFolder}/.venv/Scripts/python.exe",
-      "module": "uvicorn",
-      "env": {
-        "PYTHONPATH": "${workspaceFolder}/src/api/", 
-        "PYDEVD_DISABLE_FILE_VALIDATION": "1"
-      },
-      "envFile": "${workspaceFolder}/.env",
-      "args": ["src.api.server:app", "--reload", "--port", "8081"],
-      "jinja": true,
+      "module": "agents.mcp_client.api",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
       "justMyCode": true
     },
+    {
+      "name": "DummyMCPServer (module)",
+      "type": "python",
+      "request": "launch",
+      "module": "agents.mcp_server.dummy_server",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": true
+    }
   ]
 }
