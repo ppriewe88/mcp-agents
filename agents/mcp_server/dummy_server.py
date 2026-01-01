@@ -3,9 +3,10 @@ run with: mcp dev server.py
 """
 import logging
 import os
-
+from pydantic import Field
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
+from typing import Annotated
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -22,10 +23,18 @@ mcp = FastMCP(
     stateless_http=True,
 )
 
-
 # Add a simple calculator tool
-@mcp.tool()
-def add(a: int, b: int) -> int:
+@mcp.tool(
+    name="add_numbers",
+    description="""Adds two integers and returns their sum.
+    This is a longer placeholder text. Lorem ipsum dolor sit amet, consectetur adipiscing elit.
+    Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.""",)
+def add_typed(a: Annotated[int, Field(..., 
+                   title = "first operand",
+                   description="The first number to add")], 
+        b: Annotated[int, Field(..., 
+                   title = "second operand",
+                   description="The second number to add")] = 2) -> int:
     """Add two numbers together"""
     return a + b
 
