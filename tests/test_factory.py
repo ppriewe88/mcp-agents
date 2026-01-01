@@ -49,5 +49,5 @@ async def test_final_integration():
     print("FINAL INTEGRATION TEST DONE")
 
 if __name__ == "__main__":
-    asyncio.run(final_integration_test())
+    asyncio.run(test_final_integration())
     print("ENDE")
