@@ -21,9 +21,12 @@ class AgentConfig(BaseModel):
     name: str
     description: Optional[str] = ""
     system_prompt: str
-    middleware_loopcontrol: List[MiddlewareT] = Field(default_factory=list)
     directanswer_validation_sysprompt: str
     directanswer_allowed: bool = True
+    direct_answer_prompt: Optional[str] = None
+    toolbased_answer_prompt: Optional[str] = None
+    max_toolcalls: Optional[int] = None
+    only_one_model_call: bool = False
 
 
 class AgentRegistryEntry(BaseModel):

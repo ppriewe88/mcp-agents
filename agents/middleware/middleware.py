@@ -151,7 +151,6 @@ class OnlyOneModelCallMiddlewareSync(AgentMiddleware[CustomStateShared]):
                 "jump_to": "end"}
         return None
 
-
 ############################################################### limit toolcalls globally
 def global_toolcall_limit_sync(max_toolcalls: int):
     """Creates a synchronous middleware that limits how many tool calls an agent may perform in a run.
@@ -168,7 +167,6 @@ def global_toolcall_limit_sync(max_toolcalls: int):
         ToolCallLimitMiddleware: A configured middleware enforcing the specified tool call limit.
     """
     return ToolCallLimitMiddleware(thread_limit=None, run_limit=max_toolcalls)
-
 
 ############################################################### choose prompt dynamically
 def override_final_agentprompt_async(
@@ -269,7 +267,6 @@ def override_final_agentprompt_async(
         change_prompt_for_final_answer_async,
         document_final_prompt,
     ]
-
 
 ############################################################### validate answer (after agent)
 def configured_validator_async(

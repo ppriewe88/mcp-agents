@@ -15,7 +15,10 @@ from agents.middleware.middleware import (
     AbortOnToolErrors,
     LoggingMiddlewareSync,
     ModelCallCounterMiddlewareSync,
+    OnlyOneModelCallMiddlewareSync,
     configured_validator_async,
+    global_toolcall_limit_sync,
+    override_final_agentprompt_async,
 )
 from agents.models.agents import (
     AgentConfig,
@@ -230,36 +233,63 @@ class AgentFactory:
         description: str = "",
         name: str = "",
     ) -> ConfiguredAgent:
-        """Builds a ConfiguredAgent by combining a configuration, a toolset, and a compiled agent graph.
+        """Builds a ConfiguredAgent from a flat serializable config + factory-wired middleware."""
 
-        The method compiles a ReAct-style agent using the given model, system prompt, middleware, and tool declarations.
-        It then wraps this compiled agent together with metadata into a ConfiguredAgent.
-        The resulting instance is fully prepared to execute tasks according to its configuration.
-
-        Args:
-            config: AgentConfig - defines system prompt, middleware stack, and behavioral configuration.
-            tools: list[Any] - instantiated tool objects injected into the agent.
-            description: str - optional human-readable description of the agent.
-            name: str - optional identifier for the agent.
-
-        Returns:
-            ConfiguredAgent: the fully assembled agent containing model, tools, and configuration.
-        """
         ################################################# assemble middleware
-        basic_middleware = [
+        
+        #################### basic middleware
+        basic_middleware: list[Any] = [
             LoggingMiddlewareSync(),
             ModelCallCounterMiddlewareSync(),
             AbortOnToolErrors()
         ]
-        validation_middleware = [
+
+        #################### loop control middleware
+        loopcontrol_middleware: list[Any] = []
+
+        if config.only_one_model_call:
+            loopcontrol_middleware.append(OnlyOneModelCallMiddlewareSync())
+
+        if config.max_toolcalls is not None:
+            if config.max_toolcalls < 0:
+                raise ValueError("max_toolcalls must be >= 0 or None")
+            loopcontrol_middleware.append(global_toolcall_limit_sync(config.max_toolcalls))
+
+        if (
+            config.toolbased_answer_prompt is not None
+            or config.direct_answer_prompt is not None
+        ):
+            effective_toolbased_prompt = (
+                config.toolbased_answer_prompt
+                if config.toolbased_answer_prompt is not None
+                else config.system_prompt
+            )
+
+            effective_direct_prompt = (
+                config.direct_answer_prompt
+                if config.direct_answer_prompt is not None
+                else config.system_prompt
+            )
+
+            loopcontrol_middleware.extend(
+                override_final_agentprompt_async(
+                    toolbased_answer_prompt=effective_toolbased_prompt,
+                    direct_answer_prompt=effective_direct_prompt,
+                )
+            )
+
+        #################### validation middleware
+        validation_middleware: list[Any] = [
             configured_validator_async(
                 directanswer_validation_prompt=config.directanswer_validation_sysprompt,
                 allow_direct_answers=config.directanswer_allowed,
             )
         ]
+
+        #################### complete middleware
         complete_middleware = (
             basic_middleware
-            + config.middleware_loopcontrol
+            + loopcontrol_middleware
             + validation_middleware
         )
         ################################################# build langchain agent (core asset)

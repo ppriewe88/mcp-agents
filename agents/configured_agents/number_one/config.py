@@ -2,9 +2,6 @@ from agents.configured_agents.number_one.prompts_productive import (
     AGENTPROMPT_INITIAL,
 )
 from agents.mcp_adaption.schemas import schema_add
-from agents.middleware.middleware import (
-    OnlyOneModelCallMiddlewareSync,
-)
 from agents.models.agents import AgentConfig, AgentRegistryEntry
 
 ###################################################### setup agent
@@ -21,9 +18,7 @@ numberone_entry = AgentRegistryEntry(
                 - get retrieval (sabio), and generate answer from toolcalls and retrieval.
                 """,
             system_prompt=AGENTPROMPT_INITIAL,
-            middleware_loopcontrol=[
-                OnlyOneModelCallMiddlewareSync(),  # type: ignore[list-item]
-            ],
+            only_one_model_call=True,
             directanswer_validation_sysprompt=AGENTPROMPT_INITIAL,
             directanswer_allowed = False
         ),

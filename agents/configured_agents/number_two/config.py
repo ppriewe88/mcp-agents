@@ -3,10 +3,6 @@ from agents.configured_agents.number_two.prompts_productive import (
     AGENTPROMPT_TOOLBASED_ANSWER,
 )
 from agents.mcp_adaption.schemas import schema_birthday, schema_more_info_on_santa
-from agents.middleware.middleware import (
-    global_toolcall_limit_sync,
-    override_final_agentprompt_async,
-)
 from agents.models.agents import AgentConfig, AgentRegistryEntry
 
 ###################################################### setup agent
@@ -18,11 +14,9 @@ numbertwo_entry = AgentRegistryEntry(
             description="""blabla
                 """,
             system_prompt=AGENTPROMPT_INITIAL,
-            middleware_loopcontrol=[
-                global_toolcall_limit_sync(max_toolcalls=5),  # type: ignore[list-item]
-                *override_final_agentprompt_async(
-                    toolbased_answer_prompt=AGENTPROMPT_TOOLBASED_ANSWER)
-            ],
+            max_toolcalls=5,
+            toolbased_answer_prompt=AGENTPROMPT_TOOLBASED_ANSWER,
+            direct_answer_prompt=AGENTPROMPT_INITIAL,
             directanswer_validation_sysprompt=AGENTPROMPT_INITIAL,
             directanswer_allowed = False
         ),

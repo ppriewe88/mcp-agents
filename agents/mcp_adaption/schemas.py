@@ -29,7 +29,7 @@ schema_add = ToolSchema(
 )
 
 schema_birthday = ToolSchema(
-    server_url="http://127.0.0.1:8001/sse",
+    server_url="http://127.0.0.1:8000/sse",
     name_on_server="get_birthday_santaclaus",
     name_for_llm="geburtsjahr_weihnachtsmann_ermitteln",
     description_for_llm="liefert das geburtsjahr des weihnachtsmannes",
