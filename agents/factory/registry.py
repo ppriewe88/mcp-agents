@@ -14,6 +14,7 @@ class AgentName(str, Enum):
 
     NUMBER_ONE = "NUMBER_ONE"
     SANTA_EXPERT = "SANTA_EXPERT"
+    FRONTEND = "FRONTEND_AGENT"
 
 
 AGENT_REGISTRY: dict[AgentName, AgentRegistryEntry] = {

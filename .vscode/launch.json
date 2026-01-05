@@ -18,7 +18,7 @@
       "name": "FastAPI (module)",
       "type": "python",
       "request": "launch",
-      "module": "agents.mcp_client.api",
+      "module": "agents.mcp_api.api",
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
       "justMyCode": true

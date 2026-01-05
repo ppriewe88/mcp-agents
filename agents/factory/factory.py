@@ -25,6 +25,14 @@ from agents.models.agents import (
     AgentRegistryEntry,
     PromptMarkers,
 )
+from typing import AsyncGenerator, Any
+from langchain.messages import (
+    AIMessage,
+    AIMessageChunk,
+    AnyMessage,
+    ToolMessage,
+    HumanMessage,
+)
 from agents.models.extended_state import CustomStateShared
 from agents.models.tools import ToolSchema
 
@@ -66,21 +74,7 @@ class ConfiguredAgent:
         self, 
         query: str
     ) -> str | dict[str, Any]:
-        """Executes the configured agent using a Bello-style ticket input structure.
-
-        The method inserts the bello data into the agent input and state.
-        It then triggers asynchronous execution of the agent.
-        It returns either the explicit final answer or, as fallback, the last message emitted by the model.
-
-        Args:
-            body: str - the main text of the customer's request.
-            subject: str - the ticket subject line.
-            division: str - organizational division routing information.
-            ticket_id: str - unique identifier used for tracking and context injection.
-
-        Returns:
-            str: the final agent output, either from `final_answer` or the last generated message.
-        """
+        """Executes the configured agent using a message."""
         extended_state = CustomStateShared(
             messages=[HumanMessage(query)],
             query=query,
@@ -103,6 +97,61 @@ class ConfiguredAgent:
 
         return result
 
+    async def astream(
+        self, 
+        query: str
+    ) -> AsyncGenerator[bytes, None]:
+        """Executes the configured agent using a message."""
+        extended_state = CustomStateShared(
+            messages=[HumanMessage(query)],
+            query=query,
+            agent_name=self.name,
+            toolcall_error=False,
+            error_toolname=None,
+            model_call_count=0,
+            model_call_limit_reached=False,
+            final_agentprompt_switched=False,
+            final_agentprompt_used=PromptMarkers.INITIAL.value,
+            agent_output_aborted=False,
+            agent_output_abortion_reason=None,
+            agent_output_description=None,
+            validated_agent_output=None
+        )
+
+        extended_state["messages"] = [HumanMessage(query)]
+
+        async for stream_mode, data in self.agent.astream(
+            extended_state,
+            stream_mode=["messages", "updates"],
+        ):
+            if stream_mode == "messages":
+                token, metadata = data
+                if isinstance(token, AIMessageChunk):
+                    self._render_message_chunk(token)
+
+                    # IMPORTANT: Only stream plain token text (prevents "too much yielding")
+                    if token.text:
+                        yield token.text.encode("utf-8")
+
+            elif stream_mode == "updates":
+                for source, update in data.items():
+                    if source in ("model", "tools"):
+                        last_msg = update["messages"][-1]
+                        self._render_completed_message(last_msg)
+    
+    def _render_message_chunk(self, token: AIMessageChunk) -> None:
+            if token.text:
+                print(token.text, end="|")
+            if getattr(token, "tool_call_chunks", None):
+                print(token.tool_call_chunks)
+
+    def _render_completed_message(self, message: AnyMessage) -> None:
+        if isinstance(message, AIMessage) and getattr(message, "tool_calls", None):
+            print(f"Tool calls: {message.tool_calls}")
+        if isinstance(message, ToolMessage):
+            print(f"Tool response: {message.content_blocks}")
+        if isinstance(message, AIMessage) and not getattr(message, "tool_calls", None):
+            print(f"Model response: {message.content}")
 
 class AgentFactory:
     """Provides a unified mechanism for constructing fully configured agents from registry definitions.
@@ -130,6 +179,32 @@ class AgentFactory:
         self.registry = registry or AGENT_REGISTRY
         self.llm = model
 
+    async def run_frontend_agent(
+        self,
+        name: str,
+        entry: AgentRegistryEntry,
+        query: str
+    ) -> str | dict[str, Any]:
+        """Convenience method to load, build, and run a registry-suitable agent.
+
+        This method performs the full lifecycle:
+        - build tools and agent
+        - execute the agent with ticket input
+
+        Args:
+            name: AgentName - identifier of the registered agent.
+            entry: Registry entry for agent (type)
+            query: text with the query
+
+        Returns:
+            str | dict[str, Any]: agent result or full state if debug is enabled.
+        """
+        ################# build configured agent
+        agent: ConfiguredAgent = self._charge_agent(name=name, entry=entry)
+
+        ################# run agent
+        return await agent.run(query = query)
+    
     async def run_registered_agent(
         self,
         name: AgentName,
