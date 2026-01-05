@@ -28,7 +28,6 @@ from agents.models.agents import (
 from typing import AsyncGenerator, Any
 from langchain.messages import (
     AIMessage,
-    AIMessageChunk,
     AnyMessage,
     ToolMessage,
     HumanMessage,
@@ -158,14 +157,14 @@ class ConfiguredAgent:
                             marker = f"[CALLING TOOL:{tool_name}....]"
                             async for chunk in artificial_stream(marker, pause=0.04):
                                 yield chunk
-                            yield b"\n"
+                            yield b"\n\n"
 
                     # CASE TOOLCALL MADE
                     elif isinstance(last, ToolMessage):
                         marker = f"[TOOLCALL DONE: {last.name}....]"
                         async for chunk in artificial_stream(marker, pause=0.04):
                             yield chunk
-                        yield b"\n"
+                        yield b"\n\n"
 
                 # CASE NOT FINAL ANSWER YET
                 validated: Optional[Any] = update.get("validated_agent_output")
