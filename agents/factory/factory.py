@@ -35,6 +35,7 @@ from langchain.messages import (
 )
 from agents.models.extended_state import CustomStateShared
 from agents.models.tools import ToolSchema
+from agents.factory.utils import artificial_stream
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -120,38 +121,74 @@ class ConfiguredAgent:
 
         extended_state["messages"] = [HumanMessage(query)]
 
+        emitted_toolcall_ids: set[str] = set()
+        emitted_final = False
+
         async for stream_mode, data in self.agent.astream(
             extended_state,
             stream_mode=["messages", "updates"],
         ):
-            if stream_mode == "messages":
-                token, metadata = data
-                if isinstance(token, AIMessageChunk):
-                    self._render_message_chunk(token)
+            if stream_mode != "updates":
+                continue
+            
+            # data: dict[source, update_dict]
+            for _source, update in data.items():
+                if not isinstance(update, dict):
+                    continue
+            
+                # CASE VALIDATOR ABORT
+                if update.get("agent_output_aborted") is True:
+                    reason = update.get("agent_output_abortion_reason") or "validation rejected"
+                    yield f"[ABORTED:{reason}]".encode("utf-8")
+                    return
 
-                    # IMPORTANT: Only stream plain token text (prevents "too much yielding")
-                    if token.text:
-                        yield token.text.encode("utf-8")
+                # CASE NEW MESSAGE
+                msgs = update.get("messages")
+                if msgs:
+                    last: AnyMessage = msgs[-1]
 
-            elif stream_mode == "updates":
-                for source, update in data.items():
-                    if source in ("model", "tools"):
-                        last_msg = update["messages"][-1]
-                        self._render_completed_message(last_msg)
-    
-    def _render_message_chunk(self, token: AIMessageChunk) -> None:
-            if token.text:
-                print(token.text, end="|")
-            if getattr(token, "tool_call_chunks", None):
-                print(token.tool_call_chunks)
+                    # CASE TOOLCALL REQUESTED
+                    if isinstance(last, AIMessage) and getattr(last, "tool_calls", None):
+                        for tc in last.tool_calls:
+                            tc_id = tc.get("id") or f"{tc.get('name')}::{hash(str(tc.get('args')))}"
+                            if tc_id in emitted_toolcall_ids:
+                                continue
+                            emitted_toolcall_ids.add(tc_id)
+                            tool_name = tc.get("name", "unknown_tool")
+                            marker = f"[CALLING TOOL:{tool_name}....]"
+                            async for chunk in artificial_stream(marker, pause=0.04):
+                                yield chunk
+                            yield b"\n"
 
-    def _render_completed_message(self, message: AnyMessage) -> None:
-        if isinstance(message, AIMessage) and getattr(message, "tool_calls", None):
-            print(f"Tool calls: {message.tool_calls}")
-        if isinstance(message, ToolMessage):
-            print(f"Tool response: {message.content_blocks}")
-        if isinstance(message, AIMessage) and not getattr(message, "tool_calls", None):
-            print(f"Model response: {message.content}")
+                    # CASE TOOLCALL MADE
+                    elif isinstance(last, ToolMessage):
+                        marker = f"[TOOLCALL DONE: {last.name}....]"
+                        async for chunk in artificial_stream(marker, pause=0.04):
+                            yield chunk
+                        yield b"\n"
+
+                # CASE NOT FINAL ANSWER YET
+                validated: Optional[Any] = update.get("validated_agent_output")
+                if validated is None or emitted_final:
+                    continue
+
+                # CASE FINAL ANSWER
+                text: Optional[str] = None
+                if isinstance(validated, AIMessage):
+                    if isinstance(validated.content, str):
+                        text = validated.content
+                    else:
+                        text = str(validated.content)
+                elif isinstance(validated, str):
+                    text = validated
+                else:
+                    text = str(validated)
+
+                if text:
+                    emitted_final = True                    
+                    async for chunk in artificial_stream(text, pause=0.04):
+                        yield chunk
+                    return
 
 class AgentFactory:
     """Provides a unified mechanism for constructing fully configured agents from registry definitions.
@@ -178,32 +215,6 @@ class AgentFactory:
     ):
         self.registry = registry or AGENT_REGISTRY
         self.llm = model
-
-    async def run_frontend_agent(
-        self,
-        name: str,
-        entry: AgentRegistryEntry,
-        query: str
-    ) -> str | dict[str, Any]:
-        """Convenience method to load, build, and run a registry-suitable agent.
-
-        This method performs the full lifecycle:
-        - build tools and agent
-        - execute the agent with ticket input
-
-        Args:
-            name: AgentName - identifier of the registered agent.
-            entry: Registry entry for agent (type)
-            query: text with the query
-
-        Returns:
-            str | dict[str, Any]: agent result or full state if debug is enabled.
-        """
-        ################# build configured agent
-        agent: ConfiguredAgent = self._charge_agent(name=name, entry=entry)
-
-        ################# run agent
-        return await agent.run(query = query)
     
     async def run_registered_agent(
         self,

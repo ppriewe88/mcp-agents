@@ -195,7 +195,6 @@ def override_final_agentprompt_async(
 
         ######### generate the next model response (baseline for prompt switch)
         original_response: ModelResponse = await handler(request)  # type: ignore[misc]
-        original_response
         assert isinstance(original_response.result, list)
         assert isinstance(original_response.result[0], AIMessage)
 
