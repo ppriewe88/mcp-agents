@@ -58,7 +58,7 @@ async def word_stream(answer: str) -> AsyncGenerator[bytes, None]:
         await asyncio.sleep(0.05)
 
 
-@app.post("/stream-test2")
+@app.post("/stream-test")
 async def stream_test(payload: StreamAgentRequest):
     # Plain text stream
     answer:str = ""
@@ -109,7 +109,7 @@ async def agent_text_stream(agent, input_message) -> AsyncGenerator[bytes, None]
                 # Token-Text als bytes streamen
                 yield token.text.encode("utf-8")
 
-@app.post("/stream-test")
+@app.post("/stream-test2")
 async def invoke_stream(payload: StreamAgentRequest):
     answer:str = ""
     try:
