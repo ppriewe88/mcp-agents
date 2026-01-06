@@ -21,7 +21,7 @@ from agents.middleware.middleware import (
 )
 from agents.models.agents import (
     AgentConfig,
-    AgentRegistryEntry,
+    CompleteAgent,
     PromptMarkers,
 )
 from typing import AsyncGenerator, Any
@@ -189,15 +189,14 @@ class ConfiguredAgent:
                     return
 
 class AgentFactory:
-    """Provides a unified mechanism for constructing fully configured agents from registry definitions.
+    """Provides a unified mechanism for constructing fully configured agents.
 
     The factory orchestrates:
-     - lookup,
      - configuration loading,
      - tool instantiation,
      - and the assembly of compiled agent graphs.
 
-    It ensures that each agent is consistently created based on its registered metadata and tools.
+    It ensures that each agent is consistently created based on its configuration and tools.
     This enables a predictable and reproducible process for building agents across the system.
 
     Args:
@@ -209,12 +208,11 @@ class AgentFactory:
 
     def __init__(
         self,
-        registry: Optional[dict[str, AgentRegistryEntry]] = None,
     ):
         self.llm = model
     
     def _charge_agent(
-        self, name: str, entry: AgentRegistryEntry
+        self, name: str, entry: CompleteAgent
     ) -> ConfiguredAgent:
         """Constructs a fully configured agent by resolving its definition from the registry.
 

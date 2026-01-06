@@ -18,14 +18,15 @@ async def test_mcp_client_tools_roundtrip():
 
     connected = await client.connect()
     assert connected is True
-
+    closed = await client.close()
+    assert closed is True
     tools = await client.get_tools()
     assert tools is not None
     assert len(tools) > 0
 
     add_tool_call = MCPToolDecision.model_validate(
         {
-            "name": "add",
+            "name": "add_numbers",
             "args": {"a": 2, "b": 5},
             "id": "add-1",
         }

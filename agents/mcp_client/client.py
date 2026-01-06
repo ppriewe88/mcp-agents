@@ -279,7 +279,6 @@ if __name__ == "__main__":
     async def main():
         """Main function to run the client."""
         client = MCPClient()
-        await client.connect()
         tools = await client.get_tools()
         print(f"Retrieved tools: {tools}")
 

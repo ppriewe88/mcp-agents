@@ -2,10 +2,10 @@ from tests.configured_agents.number_one.prompts_productive import (
     AGENTPROMPT_INITIAL,
 )
 from tests.schemas import schema_add
-from agents.models.agents import AgentConfig, AgentRegistryEntry
+from agents.models.agents import AgentConfig, CompleteAgent
 
 ###################################################### setup agent
-numberone_entry = AgentRegistryEntry(
+numberone_entry = CompleteAgent(
         description="""First agent.
         It accesses tools for querying contract data.""",
         config=AgentConfig(

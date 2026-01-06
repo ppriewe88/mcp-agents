@@ -3,10 +3,10 @@ from tests.configured_agents.number_two.prompts_productive import (
     AGENTPROMPT_TOOLBASED_ANSWER,
 )
 from tests.schemas import schema_birthday, schema_more_info_on_santa
-from agents.models.agents import AgentConfig, AgentRegistryEntry
+from agents.models.agents import AgentConfig, CompleteAgent
 
 ###################################################### setup agent
-numbertwo_entry = AgentRegistryEntry(
+numbertwo_entry = CompleteAgent(
         description="""Second agent.
         It accesses tools for querying contract data.""",
         config=AgentConfig(

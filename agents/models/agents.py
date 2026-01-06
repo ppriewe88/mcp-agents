@@ -29,7 +29,7 @@ class AgentConfig(BaseModel):
     only_one_model_call: bool = False
 
 
-class AgentRegistryEntry(BaseModel):
+class CompleteAgent(BaseModel):
     """Type for entries of agent registry."""
 
     description: str
