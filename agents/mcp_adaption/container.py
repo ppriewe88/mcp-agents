@@ -1,12 +1,11 @@
 import asyncio
 import inspect
 import logging
-from typing import Any, Awaitable, Callable, Dict, List, Optional
+from typing import Any, Awaitable, Callable, Dict, List
 
 from langchain_core.tools.structured import StructuredTool
 from mcp.types import CallToolResult, TextContent
 
-from agents.mcp_client.abstract import BaseMCPClient
 from agents.mcp_client.client import MCPClient
 from agents.models.agents import MiscMarkers
 from agents.models.client import MCPToolDecision
@@ -318,7 +317,7 @@ class MCPToolContainer:
 
 if __name__ == "__main__":
     # 000301450224 000301918893
-    from agents.mcp_adaption.schemas import schema_add
+    from tests.schemas import schema_add
 
     async def debug():
         """Test."""

@@ -8,7 +8,6 @@ from langchain.messages import HumanMessage
 from langchain_core.tools.structured import StructuredTool
 from langgraph.graph.state import CompiledStateGraph, StateT
 
-from agents.factory.registry import AGENT_REGISTRY, AgentName
 from agents.llm.client import model
 from agents.mcp_adaption.container import MCPToolContainer
 from agents.middleware.middleware import (
@@ -212,56 +211,8 @@ class AgentFactory:
         self,
         registry: Optional[dict[str, AgentRegistryEntry]] = None,
     ):
-        self.registry = registry or AGENT_REGISTRY
         self.llm = model
     
-    async def run_registered_agent(
-        self,
-        name: AgentName,
-        query: str
-    ) -> str | dict[str, Any]:
-        """Convenience method to load, build, and run a registered agent.
-
-        This method performs the full lifecycle:
-        - load registry entry
-        - extract data
-        - build tools and agent
-        - execute the agent with ticket input
-
-        Args:
-            name: AgentName - identifier of the registered agent.
-            vsnr_mcp: str - VSNR injected into MCP tools.
-            subject: str - ticket subject.
-            body: str - ticket body.
-            division: str - organizational division.
-            ticket_id: str - unique ticket identifier.
-            debug: bool - return full agent state if True.
-
-        Returns:
-            str | dict[str, Any]: agent result or full state if debug is enabled.
-        """
-        ################# load registry entry
-        entry: AgentRegistryEntry = self._load_registered_agent(name)
-
-        ################# build configured agent (extract, inject, build)
-        agent: ConfiguredAgent = self._charge_agent(name=name.value, entry=entry)
-
-        ################# run agent
-        return await agent.run(query = query)
-
-    def _load_registered_agent(self, name: AgentName) -> AgentRegistryEntry:
-        """Loads agent from registry. Raises if not found.
-
-        Args: name: AgentName
-
-        Returns: entry (AgentRegistryEntry)
-        """
-        if name not in self.registry:
-            raise ValueError(f"Agent is not registered: {name}")
-
-        entry: AgentRegistryEntry = self.registry[name]
-        return entry
-
     def _charge_agent(
         self, name: str, entry: AgentRegistryEntry
     ) -> ConfiguredAgent:
@@ -391,30 +342,3 @@ class AgentFactory:
             description=description,
             name=name,
         )
-
-if __name__ == "__main__":
-    async def test_final_integration():
-        """Test."""
-        factory = AgentFactory()
-
-        #################################################################### READCONTRACT
-
-        print("#####################################")
-
-        # NUMBERONE
-        result = await factory.run_registered_agent(
-            name=AgentName.NUMBER_ONE, query="bitte addiere 2 und 3"
-        )
-        print(result)  # type: ignore[index]
-
-        print("#####################################")
-
-        # NUMBERTWO
-        result = await factory.run_registered_agent(
-            name=AgentName.SANTA_EXPERT, query="Wann ist der Weihnachtsmann geboren?"
-        )
-        print(result)  # type: ignore[index]
-
-        print("#####################################")
-    import asyncio
-    asyncio.run(test_final_integration())

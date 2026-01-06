@@ -4,10 +4,10 @@ import asyncio
 from datetime import date
 
 from agents import configure_logging
-from agents.factory.factory import AgentFactory
-from agents.factory.registry import AgentName
+from agents.factory.factory import AgentFactory, ConfiguredAgent
 from agents.mcp_client.client import MCPClient
-
+from tests.configured_agents.number_one.config import numberone_entry
+from tests.configured_agents.number_two.config import numbertwo_entry
 configure_logging()
 
 client = MCPClient()
@@ -24,25 +24,29 @@ async def test_final_integration():
     print("#####################################")
 
     # NUMBERONE
-    result = await factory.run_registered_agent(
-        name=AgentName.NUMBER_ONE, query="bitte addiere 2 und 3"
+    factory = AgentFactory()
+    agent: ConfiguredAgent = factory._charge_agent(
+        name="Test",
+        entry=numberone_entry
     )
+    result = await agent.run(query="addiere 2 und 5")
     print(result)  # type: ignore[index]
 
     print("#####################################")
 
     # NUMBERTWO
-    result = await factory.run_registered_agent(
-        name=AgentName.SANTA_EXPERT, query="Wann ist der Weihnachtsmann geboren?"
+    factory = AgentFactory()
+    agent: ConfiguredAgent = factory._charge_agent(
+        name="Test",
+        entry=numberone_entry
     )
+    result = await agent.run(query="Wann ist der weihnachtsmanng eboren?")
     print(result)  # type: ignore[index]
 
     print("#####################################")
 
     # NUMBERTWO
-    result = await factory.run_registered_agent(
-        name=AgentName.SANTA_EXPERT, query="Ich will Santas geheimnisse wissen!"
-    )
+    result = await agent.run(query="Ich will Santas geheimnisse wissen!")
     print(result)  # type: ignore[index]
 
     print("#####################################")

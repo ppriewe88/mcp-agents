@@ -1,8 +1,8 @@
-from agents.configured_agents.number_two.prompts_productive import (
+from tests.configured_agents.number_two.prompts_productive import (
     AGENTPROMPT_INITIAL,
     AGENTPROMPT_TOOLBASED_ANSWER,
 )
-from agents.mcp_adaption.schemas import schema_birthday, schema_more_info_on_santa
+from tests.schemas import schema_birthday, schema_more_info_on_santa
 from agents.models.agents import AgentConfig, AgentRegistryEntry
 
 ###################################################### setup agent

@@ -1,7 +1,7 @@
-from agents.configured_agents.number_one.prompts_productive import (
+from tests.configured_agents.number_one.prompts_productive import (
     AGENTPROMPT_INITIAL,
 )
-from agents.mcp_adaption.schemas import schema_add
+from tests.schemas import schema_add
 from agents.models.agents import AgentConfig, AgentRegistryEntry
 
 ###################################################### setup agent
