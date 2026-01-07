@@ -180,3 +180,15 @@ async def main() -> None:
 if __name__=="__main__":
     import asyncio
     asyncio.run(main())
+
+
+############### HINWEISE
+"""
+ALS NÄCHSTES:
+- eigener laptop: auf python 12 umstellen
+- agents_as_tools strukturiert einbauen, siehe approach.py
+-- dafür: unbedingt StructuredTool, und dann Funktion, die das zurückgibt (ähnlich wie container)
+-- Datenmodell Agent as tool: CompleteAgent mit: toolbeschreibung; args (immer: query als Text)
+- streaming: chunks typisieren
+- frontend: agent-as-a-tool zusammenstellbar
+"""
