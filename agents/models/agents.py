@@ -3,7 +3,7 @@ from enum import Enum
 from typing import Any, List, Optional
 
 from langchain.agents.middleware import AgentMiddleware, AgentState
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 from agents.models.tools import ToolSchema
 
@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 from typing import TypeAlias
 
+# from langchain_core.tools import BaseTool
 MiddlewareT: TypeAlias = AgentMiddleware[AgentState[Any], None]
 
 
@@ -35,6 +36,7 @@ class CompleteAgent(BaseModel):
     description: str
     config: AgentConfig
     tool_schemas: list[ToolSchema]
+    agents_as_tools: List[Any] = []
 
 class AbortionCodes(str, Enum):
     """Enum of agent response abortion reasons."""

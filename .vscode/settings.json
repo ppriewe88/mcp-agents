@@ -39,7 +39,7 @@
     ".mypy_cache/**": true,
     ".pytest_cache/**": true,
     ".ruff_cache/**": true,
-    ".venv/**": true
+    ".venv/**": false
   },
   // ruff settings
   "ruff.path": ["${workspaceFolder}/.venv/bin/ruff"],

@@ -1,13 +1,19 @@
 import logging
-from typing import Any, List, Optional, Sequence, cast
+from typing import Any, AsyncGenerator, List, Optional, Sequence, cast
 
 from dotenv import load_dotenv
 from langchain.agents import create_agent
 from langchain.agents.middleware import AgentMiddleware, AgentState
-from langchain.messages import HumanMessage
+from langchain.messages import (
+    AIMessage,
+    AnyMessage,
+    HumanMessage,
+    ToolMessage,
+)
 from langchain_core.tools.structured import StructuredTool
 from langgraph.graph.state import CompiledStateGraph, StateT
 
+from agents.factory.utils import artificial_stream
 from agents.llm.client import model
 from agents.mcp_adaption.container import MCPToolContainer
 from agents.middleware.middleware import (
@@ -24,16 +30,8 @@ from agents.models.agents import (
     CompleteAgent,
     PromptMarkers,
 )
-from typing import AsyncGenerator, Any
-from langchain.messages import (
-    AIMessage,
-    AnyMessage,
-    ToolMessage,
-    HumanMessage,
-)
 from agents.models.extended_state import CustomStateShared
 from agents.models.tools import ToolSchema
-from agents.factory.utils import artificial_stream
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -68,15 +66,9 @@ class ConfiguredAgent:
         self.config: AgentConfig = config
         self.name: str = name or ""
         self.description = description
-
-    async def run(
-        self, 
-        query: str
-    ) -> str | dict[str, Any]:
-        """Executes the configured agent using a message."""
-        extended_state = CustomStateShared(
-            messages=[HumanMessage(query)],
-            query=query,
+        self.initial_state = CustomStateShared(
+            messages=[HumanMessage("EMPTY_PLACEHOLDER")],
+            query="EMPTY_PLACEHOLDER",
             agent_name=self.name,
             toolcall_error=False,
             error_toolname=None,
@@ -87,56 +79,58 @@ class ConfiguredAgent:
             agent_output_aborted=False,
             agent_output_abortion_reason=None,
             agent_output_description=None,
-            validated_agent_output=None
+            validated_agent_output=None,
         )
 
+    async def run(self, query: str) -> str | dict[str, Any]:
+        """Executes the configured agent using a message."""
+        extended_state = self.initial_state
         extended_state["messages"] = [HumanMessage(query)]
+        extended_state["query"] = query
 
         result = await self.agent.ainvoke(extended_state)
 
         return result
 
-    async def astream(
-        self, 
-        query: str
-    ) -> AsyncGenerator[bytes, None]:
+    async def outer_astream(self, query: str) -> AsyncGenerator[bytes, None]:
         """Executes the configured agent using a message."""
-        extended_state = CustomStateShared(
-            messages=[HumanMessage(query)],
-            query=query,
-            agent_name=self.name,
-            toolcall_error=False,
-            error_toolname=None,
-            model_call_count=0,
-            model_call_limit_reached=False,
-            final_agentprompt_switched=False,
-            final_agentprompt_used=PromptMarkers.INITIAL.value,
-            agent_output_aborted=False,
-            agent_output_abortion_reason=None,
-            agent_output_description=None,
-            validated_agent_output=None
-        )
-
+        extended_state = self.initial_state
         extended_state["messages"] = [HumanMessage(query)]
+        extended_state["query"] = query
 
         emitted_toolcall_ids: set[str] = set()
         emitted_final = False
 
         async for stream_mode, data in self.agent.astream(
             extended_state,
-            stream_mode=["messages", "updates"],
+            stream_mode=["messages", "updates", "custom"],
         ):
-            if stream_mode != "updates":
+            if stream_mode == "custom":
+                # data ist genau das dict, das du im inner tool via writer({...}) sendest
+                # erstmal nur simpel printen
+                print("[DEBUG][CUSTOM EVENT]:", data)
+
+                # optional: auch in den Stream geben, falls du es sehen willst
+                # yield f"[INNER CUSTOM]: {data}".encode("utf-8")
+                # yield b"\n\n"
+
+                continue  # ganz wichtig: nicht in updates-Logik fallen
+
+            if stream_mode == "messages":
                 continue
-            
+
+            assert stream_mode == "updates"
             # data: dict[source, update_dict]
-            for _source, update in data.items():
+            for _source, update in data.items():  # type: ignore[union-attr]
                 if not isinstance(update, dict):
                     continue
-            
+
                 # CASE VALIDATOR ABORT
                 if update.get("agent_output_aborted") is True:
-                    reason = update.get("agent_output_abortion_reason") or "validation rejected"
+                    reason = (
+                        update.get("agent_output_abortion_reason")
+                        or "validation rejected"
+                    )
                     yield f"[ABORTED:{reason}]".encode("utf-8")
                     return
 
@@ -146,9 +140,14 @@ class ConfiguredAgent:
                     last: AnyMessage = msgs[-1]
 
                     # CASE TOOLCALL REQUESTED
-                    if isinstance(last, AIMessage) and getattr(last, "tool_calls", None):
+                    if isinstance(last, AIMessage) and getattr(
+                        last, "tool_calls", None
+                    ):
                         for tc in last.tool_calls:
-                            tc_id = tc.get("id") or f"{tc.get('name')}::{hash(str(tc.get('args')))}"
+                            tc_id = (
+                                tc.get("id")
+                                or f"{tc.get('name')}::{hash(str(tc.get('args')))}"
+                            )
                             if tc_id in emitted_toolcall_ids:
                                 continue
                             emitted_toolcall_ids.add(tc_id)
@@ -183,7 +182,7 @@ class ConfiguredAgent:
                     text = str(validated)
 
                 if text:
-                    emitted_final = True                    
+                    emitted_final = True
                     async for chunk in artificial_stream(text, pause=0.04):
                         yield chunk
                     return
@@ -236,7 +235,9 @@ class AgentFactory:
         config: AgentConfig = entry.config
 
         ################################################################### charge tools (inject)
-        tools: List[StructuredTool] = self._charge_tools(tool_schemas=entry.tool_schemas)
+        tools: List[StructuredTool] = self._charge_tools(
+            tool_schemas=entry.tool_schemas, agents_as_tools=entry.agents_as_tools
+        )
 
         ################################################################### construct agent (build)
         description = entry.description + f"\nconfig: {config.name}:" + f"{config.description}"
@@ -251,14 +252,14 @@ class AgentFactory:
         return agent
 
     def _charge_tools(
-        self,
-        tool_schemas: List[ToolSchema],
+        self, tool_schemas: List[ToolSchema], agents_as_tools: List[Any]
     ) -> List[StructuredTool]:
         """Creates tools with container class methodology. Injects mandatory and optional data."""
         ############################################################## build tool container
         tool_container = MCPToolContainer(schemas=tool_schemas)
-        tools: List[StructuredTool] = list(tool_container.tools_agent.values())
-        return tools
+        mcp_tools: List[StructuredTool] = list(tool_container.tools_agent.values())
+        all_tools = mcp_tools + agents_as_tools
+        return all_tools
 
     def _create_configured_agent(
         self,

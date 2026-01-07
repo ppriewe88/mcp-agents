@@ -1,18 +1,16 @@
+import logging
+from typing import Dict, Literal
+
+from dotenv import load_dotenv
 from fastapi import FastAPI
-from agents.mcp_client.client import MCPClient
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, StreamingResponse
+
+from agents.factory.factory import ConfiguredAgent
 from agents.factory.utils import artificial_stream
 from agents.mcp_api.utils import assemble_agent
-from fastapi.responses import JSONResponse
-from fastapi.middleware.cors import CORSMiddleware
-from agents.models.api import (
-    GetToolsRequest,
-    StreamAgentRequest
-    )
-from agents.factory.factory import ConfiguredAgent
-from typing import Literal
-import logging 
-from dotenv import load_dotenv
-from fastapi.responses import StreamingResponse
+from agents.mcp_client.client import MCPClient
+from agents.models.api import GetToolsRequest, StreamAgentRequest
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -50,29 +48,33 @@ MODE: Literal["true_stream" , "simulated_stream"] = "true_stream"
 @app.post("/stream-test")
 async def stream_test(payload: StreamAgentRequest):
     # Plain text stream
+    answer: str = ""
+    message: str = ""
+    agent: ConfiguredAgent
     if MODE == "simulated_stream":
-        answer:str = ""
         try:
-            message: str = payload.message
-            agent:ConfiguredAgent = assemble_agent(payload)
-            result = await agent.run(query=message)
+            message = payload.message
+            agent = assemble_agent(payload)
+            result: str | Dict = await agent.run(query=message)
+            assert isinstance(result, Dict)
             if result["agent_output_aborted"]:
-                answer = f"Agent response was aborted for the following reason: {result["agent_output_abortion_reason"]}"
+                answer = f"Agent response was aborted for the following reason: {result['agent_output_abortion_reason']}"
             else: 
                 answer = result["validated_agent_output"]
-            stream = StreamingResponse(artificial_stream(answer), media_type="text/plain")
+            stream = StreamingResponse(
+                artificial_stream(answer, pause=0.02), media_type="text/plain"
+            )
         except Exception as error:
             answer = "Ooops, something went wrong in the backend...!"
             logger.error(f"[API] {answer}. \n error: {error}")
 
         return stream
     if MODE == "true_stream":
-        answer:str = ""
         try:
-            message: str = payload.message
-            agent: ConfiguredAgent = assemble_agent(payload)
+            message = payload.message
+            agent = assemble_agent(payload)
             stream = StreamingResponse(
-                agent.astream(message),
+                agent.outer_astream(message),
                 media_type="text/plain",
             )
         except Exception as error:
