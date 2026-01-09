@@ -210,6 +210,7 @@ def override_final_agentprompt_async(
         messages: List[HumanMessage | AIMessage | ToolMessage] = request.state["messages"]  # type: ignore[assignment]
         agent_name = request.state.get("agent_name")
         assert agent_name is not None
+
         ######### generate the next model response (baseline for prompt switch)
         original_response: ModelResponse = await handler(request)  # type: ignore[misc]
         assert isinstance(original_response.result, list)
@@ -221,9 +222,10 @@ def override_final_agentprompt_async(
         next_messages: List[HumanMessage | AIMessage | ToolMessage] = [*messages, message]
         next_detected: DetectedStatus = detect_loop_status(next_messages)
         next_type = next_detected.type
-
-        ######### Vessel for remade response
+        
+        ######### Vessels
         remade_response: ModelResponse
+        prompt_switched: bool = False
 
         ### DIRECT ANSWER WITHOUT PRIOR TOOLCALLS
         if next_type == LoopStatus.DIRECT_ANSWER and direct_answer_prompt is not None:
@@ -231,6 +233,7 @@ def override_final_agentprompt_async(
             logger.info(
                 f"[AGENT {agent_name}] Agent is answering directly (no prior toolcalls), switched direct_answer prompt: {bool(direct_answer_prompt)}"
             )
+            prompt_switched = True
             remade_response = await handler(request.override(system_message=new_prompt)) # type: ignore[misc]
             assert isinstance(remade_response.result, list)
             assert isinstance(remade_response.result[0], AIMessage)
@@ -243,12 +246,16 @@ def override_final_agentprompt_async(
                 f"[AGENT {agent_name}] Agent is answering with prior toolcalls made, switch prompt"
             )
             new_prompt = SystemMessage(content=toolbased_answer_prompt)
+            prompt_switched = True
             remade_response = await handler(request.override(system_message=new_prompt))  # type: ignore[misc]
             remade_response.result[0].response_metadata["used_prompt"] = PromptMarkers.TOOLBASED_ANSWER.value
             return remade_response
 
-        ### NO SWITCH (=ANSWER WITH TOOLCALL REQUESTS)
+        ### NO SWITCH (= answer with TOOLCALL REQUESTS or DIRECT ANSWER WITHOUT PROMPT SWITCH)
         original_response.result[0].response_metadata["used_prompt"] = PromptMarkers.INITIAL.value
+        logger.info(
+                f"[AGENT {agent_name}] Agent is answering. Loop status: {next_type.value}. Prompt switched: {prompt_switched}"
+            )
         return original_response
 
 
