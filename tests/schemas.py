@@ -48,7 +48,7 @@ schema_birthday = ToolSchema(
 
 schema_more_info_on_santa = ToolSchema(
     server_url="http://127.0.0.1:8000/sse",
-    name_on_server="summarize",
+    name_on_server="more_infos_on_santa",
     name_for_llm="weitere_infos_weihnachtsmann",
     description_for_llm="""liefert weitere informationen zum weihnachtsmann. 
     Braucht das geburtsjahr des weihnachtsmannes als input""",
@@ -58,6 +58,24 @@ schema_more_info_on_santa = ToolSchema(
                 name_on_server="birth_year",
                 name_for_llm="geburtsjahr",
                 description_for_llm="geburtsjahr des weihnachtsmanns",
+                type="string",
+            )
+        ],
+        additionalProperties=False,
+    ),
+)
+
+schema_shopping_list = ToolSchema(
+    server_url="http://127.0.0.1:8000/sse",
+    name_on_server="shopping_list",
+    name_for_llm="get_users_shopping_list",
+    description_for_llm="""Gives you the user's shopping list.""",
+    args_schema=ToolArgsSchema(
+        properties=[
+            ToolArg(
+                name_on_server="name",
+                name_for_llm="name",
+                description_for_llm="name of the user. If not given, as for it.",
                 type="string",
             )
         ],

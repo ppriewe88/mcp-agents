@@ -46,24 +46,28 @@ class MCPClient(BaseMCPClient):
         """Setup client, initialize connection to mcp server."""
         try:
             # setup client, connect to server (sse stream), initialize session
-            logger.info(f"Setting up client for MCP server at {self.mcp_endpoint}")
+            logger.info(
+                f"[CLIENT] Setting up client for MCP server at {self.mcp_endpoint}"
+            )
             client_ctx = sse_client(url=self.mcp_endpoint)
             read_stream, write_stream = await self.exit_stack.enter_async_context(client_ctx)
             self.session = await self.exit_stack.enter_async_context(
                 ClientSession(read_stream, write_stream)
             )
             await self.session.initialize()
-            logger.info("Successfully initialized connection to mcp server.")
+            logger.info("[CLIENT] Successfully initialized connection to mcp server.")
 
         # error handling. No return
         except Exception as error:
             logger.error(
-                f"{MCPErrorCode.CLIENT}. Failure during client setup and initialization of connection."
+                f"[CLIENT] {MCPErrorCode.CLIENT}. Failure during client setup and initialization of connection."
             )
-            logger.error(f"Error during client setup and initialization of connection: {error}")
+            logger.error(
+                f"[CLIENT] Error during client setup and initialization of connection: {error}"
+            )
             self.session = None
             raise MCPError(
-                "Failure during client setup and initialization of connection.",
+                "[CLIENT] Failure during client setup and initialization of connection.",
                 code=MCPErrorCode.CLIENT,
             ) from error
 
@@ -77,7 +81,7 @@ class MCPClient(BaseMCPClient):
             await self._setup_client()
 
             # log success, return
-            logger.info("MCP client connection successfully established.")
+            logger.info("[CLIENT] MCP client connection successfully established.")
             return True
 
         # error handling. No return
@@ -86,7 +90,7 @@ class MCPClient(BaseMCPClient):
             raise
         except Exception as error:
             logger.error(
-                f"{MCPErrorCode.UNKNOWN}. MCP connection failed due to unknown reason.",
+                f"[CLIENT] {MCPErrorCode.UNKNOWN}. MCP connection failed due to unknown reason.",
                 exc_info=False,
             )
             raise MCPError(
@@ -105,12 +109,12 @@ class MCPClient(BaseMCPClient):
         try:
             await self.exit_stack.aclose()
             self.session = None
-            logger.info("Closure of connection to mcp server")
+            logger.info("[CLIENT] Closure of connection to mcp server")
             return True
 
         # error handling. No raise, no return
         except Exception:
-            logger.info("Enforced closure of connection to mcp server")
+            logger.info("[CLIENT] Enforced closure of connection to mcp server")
             # destroy connection in any possible error case
             self.session = None
             return True
@@ -122,10 +126,10 @@ class MCPClient(BaseMCPClient):
                 # if session exists, ping and reconnect, if ping fails
                 try:
                     await self.session.send_ping()
-                    logger.info("Ping successfull, session still active")
+                    logger.info("[CLIENT] Ping successfull, session still active")
                 except Exception:
                     logger.error(
-                        "Ping failed, try to reconnect.", exc_info=False
+                        "[CLIENT] Ping failed, try to reconnect.", exc_info=False
                     )  # suppress logging of stack trace
                     self.session = None
                     await self.connect()
@@ -151,17 +155,20 @@ class MCPClient(BaseMCPClient):
         # retrieve tools from server. If empty return, log, and return empty
         try:
             await self.connect()
+            assert isinstance(self.session, ClientSession)
             tools_result = await self.session.list_tools()
             if tools_result.tools:
                 for tool in tools_result.tools:
-                    logger.debug(f"{self.mcp_endpoint}, RETRIEVED TOOL: {tool.name}")
-                    logger.debug(f"{tool.inputSchema}")
-                    logger.debug(f"{type(tool.inputSchema)}")
+                    logger.debug(
+                        f"[CLIENT] {self.mcp_endpoint}, RETRIEVED TOOL: {tool.name}"
+                    )
+                    logger.debug(f"[CLIENT] {tool.inputSchema}")
+                    logger.debug(f"[CLIENT] {type(tool.inputSchema)}")
                 mcp_tools = cast(List[MCPTool], tools_result.tools)
                 available_tools = self._convert_tools_to_openai_format(mcp_tools)
             else:
                 logger.error(
-                    f"{MCPErrorCode.LIST_TOOLS}. Server returned empty tool list.",
+                    f"[CLIENT] {MCPErrorCode.LIST_TOOLS}. Server returned empty tool list.",
                     exc_info=False,
                 )
                 raise MCPError(
@@ -170,7 +177,7 @@ class MCPClient(BaseMCPClient):
                 )
 
             # log success, return
-            logger.debug("Successfully fetched tools from mcp server")
+            logger.debug("[CLIENT] Successfully fetched tools from mcp server")
             await self.close()
             return available_tools
 
@@ -180,7 +187,7 @@ class MCPClient(BaseMCPClient):
             raise
         except Exception as error:
             logger.error(
-                f"{MCPErrorCode.UNKNOWN}. Getting tools from MCP server failed due to unknown reason.",
+                f"[CLIENT] {MCPErrorCode.UNKNOWN}. Getting tools from MCP server failed due to unknown reason.",
                 exc_info=False,
             )
             raise MCPError(
@@ -208,14 +215,14 @@ class MCPClient(BaseMCPClient):
 
             except Exception as error:
                 logger.error(
-                    f"{MCPErrorCode.CONVERSION}. Converting tool to openai format failed. Tool name: {tool.name}"
+                    f"[CLIENT] {MCPErrorCode.CONVERSION}. Converting tool to openai format failed. Tool name: {tool.name}"
                 )
                 raise MCPError(
                     f"Converting tool to openai format failed. Tool name: {tool.name}",
                     code=MCPErrorCode.CONVERSION,
                 ) from error
 
-        logger.debug("Tools successfully retrieved and converted.")
+        logger.debug("[CLIENT] Tools successfully retrieved and converted.")
         return openai_tools
 
     async def call_tools(self, tooling_decision: List[MCPToolDecision]) -> List[CallToolResult]:
@@ -253,7 +260,7 @@ class MCPClient(BaseMCPClient):
                 toolcall_results.append(tool_response)
 
             # log success, return
-            logger.info("Successfully called tools on mcp server")
+            logger.info("[CLIENT] Successfully called tools on mcp server")
 
             return toolcall_results
 
@@ -263,11 +270,11 @@ class MCPClient(BaseMCPClient):
             raise
         except Exception as error:
             error_message = (
-                f"{MCPErrorCode.TOOLING} Calling tools failed. "
+                f"[CLIENT] {MCPErrorCode.TOOLING} Calling tools failed. "
                 f"Tried toolcall: {tool_call_id}, {tool_name} with args {tool_args}. "
             )
             if isinstance(error, McpError):
-                error_message += f"Internal reason (server): {error}"
+                error_message += f"[CLIENT] Internal reason (server): {error}"
                 logger.error(error_message, exc_info=False)
             else:
                 logger.error(error_message, exc_info=False)

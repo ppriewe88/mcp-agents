@@ -316,19 +316,17 @@ class MCPToolContainer:
 ##############################################################################
 
 if __name__ == "__main__":
-    # 000301450224 000301918893
     from tests.schemas import schema_add
 
     async def debug():
         """Test."""
-        ################################################################################# only vsnr injection
+        
         container = MCPToolContainer(
             schemas=[
                 schema_add
             ],
         )
 
-        ############################################################################## SFK
         result = await container.tools_raw[schema_add.name_for_llm](
             a = "5",
             b = "7",
@@ -342,14 +340,12 @@ if __name__ == "__main__":
 
     async def raw_test():
         """Test."""
-        ################################################################################# only vsnr injection
         container = MCPToolContainer(
             schemas=[
                 schema_add
             ],
         )
 
-        ############################################################################## SFK
         result = await container.tools_raw[schema_add.name_for_llm](
             a = "5",
             b = "7",

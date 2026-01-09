@@ -15,12 +15,12 @@ from typing import TypeAlias
 MiddlewareT: TypeAlias = AgentMiddleware[AgentState[Any], None]
 
 
-class AgentConfig(BaseModel):
+class AgentBehaviourConfig(BaseModel):
     """Configuration for an agent."""
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     name: str
-    description: Optional[str] = ""
+    description: str = ""
     system_prompt: str
     directanswer_validation_sysprompt: str
     directanswer_allowed: bool = True
@@ -30,11 +30,11 @@ class AgentConfig(BaseModel):
     only_one_model_call: bool = False
 
 
-class CompleteAgent(BaseModel):
+class CompleteAgentConfig(BaseModel):
     """Type for entries of agent registry."""
 
     description: str
-    config: AgentConfig
+    behaviour_config: AgentBehaviourConfig
     tool_schemas: list[ToolSchema]
     agents_as_tools: List[Any] = []
 

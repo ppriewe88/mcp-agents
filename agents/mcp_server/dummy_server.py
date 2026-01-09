@@ -3,10 +3,11 @@ run with: mcp dev server.py
 """
 import logging
 import os
-from pydantic import Field
+from typing import Annotated
+
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
-from typing import Annotated
+from pydantic import Field
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -42,7 +43,7 @@ def get_birthday_santaclaus(query:str) -> str:
     return "Hallo! Die geheime Information ist: Der Weihnachtsmann ist am 31.12.1570 geboren!"
 
 @mcp.tool()
-def summarize(birth_year:str) -> str:
+def more_infos_on_santa(birth_year: str) -> str:
     """say hi back"""
     answer = f"Datum: {birth_year}, Name: Thaddäus!"
     return answer 
@@ -50,7 +51,7 @@ def summarize(birth_year:str) -> str:
 @mcp.tool()
 def shopping_list(name:str) -> list:
     """say hi back"""
-    return [1,2,3]
+    return ["sugar", "flour", "butter"]
 
 
 # Run the server

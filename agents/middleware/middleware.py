@@ -45,7 +45,9 @@ class LoggingMiddlewareSync(AgentMiddleware):
 
     def before_model(self, state: AgentState, runtime: Runtime) -> dict[str, Any] | None:
         """Logs before model calls."""
-        logger.info("Agent call: model node")
+        agent_name = state.get("agent_name")
+        assert agent_name is not None
+        logger.info(f"[AGENT {agent_name}] Agent call: model node")
         return None
 
     def after_model(self, state: AgentState, runtime: Runtime) -> dict[str, Any] | None:
@@ -53,13 +55,19 @@ class LoggingMiddlewareSync(AgentMiddleware):
         messages: List[HumanMessage | AIMessage | ToolMessage] = state["messages"]  # type: ignore[assignment]
         last_message = messages[-1]
         detected: DetectedStatus = detect_loop_status(messages)
-        logger.info(f"Agent (model node) response: {detected.type.value}")
+        agent_name = state.get("agent_name")
+        assert agent_name is not None
+        logger.info(
+            f"[AGENT {agent_name}] Agent (model node) response: {detected.type.value}"
+        )
         if detected.abortion_code:
-            logger.info(f"Abortion code: {detected.type.value}")
+            logger.info(f"[AGENT {agent_name}] Abortion code: {detected.type.value}")
         if detected.type == LoopStatus.TOOLCALL_REQUEST:
             assert hasattr(last_message, "tool_calls")
             for toolcall in last_message.tool_calls:
-                logger.info(f"Requested toolcall: {toolcall['name']}")
+                logger.info(
+                    f"[AGENT {agent_name}] Requested toolcall: {toolcall['name']}"
+                )
         return None
 
 ############################################################### evaluate toolcalls for error handling
@@ -82,8 +90,10 @@ class AbortOnToolErrors(AgentMiddleware):
         detected = detect_loop_status(messages)
         if detected.type == LoopStatus.ABORTED and detected.abortion_code == AbortionCodes.TOOL_ERROR:
             last_message = state["messages"][-1]
+            agent_name = state.get("agent_name")
+            assert agent_name is not None
             logger.info(
-                f"Postprocessed MCP Tool result of {last_message.name} is unfixable error! Jump to end!"
+                f"[AGENT {agent_name}] Postprocessed MCP Tool result of {last_message.name} is unfixable error! Jump to end!"
             )
             return {
                 "toolcall_error": True,
@@ -112,7 +122,9 @@ class ModelCallCounterMiddlewareSync(AgentMiddleware[CustomStateShared]):
             dict[str, Any] | None: Updated state containing the incremented model_call_count, or None if unchanged.
         """
         count: int = state.get("model_call_count") or 0
-        logger.info(f"Current count of model calls (after model node): {count + 1}")
+        logger.info(
+            f"[AGENT {state['agent_name']}] Current count of model calls (after model node): {count + 1}"
+        )
         return {"model_call_count": count + 1}
 
 ############################################################### Count Modelcalls
@@ -144,7 +156,11 @@ class OnlyOneModelCallMiddlewareSync(AgentMiddleware[CustomStateShared]):
             otherwise None to continue execution.
         """
         count: int = state.get("model_call_count") or 0
-        logger.info(f"Current count of model calls (before model node): {count}")
+        agent_name = state.get("agent_name")
+        assert agent_name is not None
+        logger.info(
+            f"[AGENT {agent_name}] Current count of model calls (before model node): {count}"
+        )
         if count >= 1:
             return {
                 "model_call_limit_reached": True,
@@ -192,7 +208,8 @@ def override_final_agentprompt_async(
     ) -> ModelResponse:
         """Change prompt when tooling is done."""
         messages: List[HumanMessage | AIMessage | ToolMessage] = request.state["messages"]  # type: ignore[assignment]
-
+        agent_name = request.state.get("agent_name")
+        assert agent_name is not None
         ######### generate the next model response (baseline for prompt switch)
         original_response: ModelResponse = await handler(request)  # type: ignore[misc]
         assert isinstance(original_response.result, list)
@@ -212,7 +229,7 @@ def override_final_agentprompt_async(
         if next_type == LoopStatus.DIRECT_ANSWER and direct_answer_prompt is not None:
             new_prompt = SystemMessage(content=direct_answer_prompt)
             logger.info(
-                f"Agent is answering directly (no prior toolcalls), switched direct_answer prompt: {bool(direct_answer_prompt)}"
+                f"[AGENT {agent_name}] Agent is answering directly (no prior toolcalls), switched direct_answer prompt: {bool(direct_answer_prompt)}"
             )
             remade_response = await handler(request.override(system_message=new_prompt)) # type: ignore[misc]
             assert isinstance(remade_response.result, list)
@@ -222,7 +239,9 @@ def override_final_agentprompt_async(
 
         ### FINAL ANSWER WITH PRIOR TOOLCALLS
         if next_type == LoopStatus.TOOL_BASED_ANSWER:
-            logger.info("Agent is answering with prior toolcalls made, switch prompt")
+            logger.info(
+                f"[AGENT {agent_name}] Agent is answering with prior toolcalls made, switch prompt"
+            )
             new_prompt = SystemMessage(content=toolbased_answer_prompt)
             remade_response = await handler(request.override(system_message=new_prompt))  # type: ignore[misc]
             remade_response.result[0].response_metadata["used_prompt"] = PromptMarkers.TOOLBASED_ANSWER.value
@@ -317,13 +336,16 @@ def configured_validator_async(
         validator = AgentResponseValidator(system_prompt_usability=directanswer_validation_prompt)
 
         ###################### validate
-        logger.info("[AGENT OUTPUT VALIDATION] Validate agent response")
+        agent_name = state.get("agent_name")
+        assert agent_name is not None
+        logger.info(f"[AGENT {agent_name}] Validate agent response")
         agent_output: ValidatedAgentResponse = await validator.validate_agent_response(
             available_messages,
             allow_direct_answers,
         )
 
         assert agent_output.type is not None
+        logger.info(f"[AGENT {agent_name}] Agent response has been validated.")
         return {
             "agent_output_aborted": not agent_output.valid,
             "agent_output_abortion_reason": (

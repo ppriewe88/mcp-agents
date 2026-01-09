@@ -13,9 +13,9 @@ from langchain.messages import (
 from langchain_core.tools.structured import StructuredTool
 from langgraph.graph.state import CompiledStateGraph, StateT
 
+from agents.containers.mcp_tools import MCPToolContainer
 from agents.factory.utils import artificial_stream
 from agents.llm.client import model
-from agents.mcp_adaption.container import MCPToolContainer
 from agents.middleware.middleware import (
     AbortOnToolErrors,
     LoggingMiddlewareSync,
@@ -26,8 +26,8 @@ from agents.middleware.middleware import (
     override_final_agentprompt_async,
 )
 from agents.models.agents import (
-    AgentConfig,
-    CompleteAgent,
+    AgentBehaviourConfig,
+    CompleteAgentConfig,
     PromptMarkers,
 )
 from agents.models.extended_state import CustomStateShared
@@ -38,7 +38,7 @@ logger.setLevel(logging.INFO)
 load_dotenv()
 
 
-class ConfiguredAgent:
+class RunnableAgent:
     """Provides a high-level wrapper around a fully configured agent.
 
     The class bundles an agent instance with its configuration.
@@ -58,12 +58,12 @@ class ConfiguredAgent:
     def __init__(
         self,
         langchain_agent: CompiledStateGraph,
-        config: AgentConfig,
+        config: AgentBehaviourConfig,
         name: Optional[str] = None,
         description: str = "",
     ):
-        self.agent: CompiledStateGraph[StateT] = langchain_agent # type: ignore[valid-type]
-        self.config: AgentConfig = config
+        self.agent: CompiledStateGraph[StateT] = langchain_agent  # type: ignore[valid-type]
+        self.config: AgentBehaviourConfig = config
         self.name: str = name or ""
         self.description = description
         self.initial_state = CustomStateShared(
@@ -106,13 +106,11 @@ class ConfiguredAgent:
             stream_mode=["messages", "updates", "custom"],
         ):
             if stream_mode == "custom":
-                # data ist genau das dict, das du im inner tool via writer({...}) sendest
-                # erstmal nur simpel printen
+                # data is dict sent by inner agent's stream writer
                 print("[DEBUG][CUSTOM EVENT]:", data)
 
-                # optional: auch in den Stream geben, falls du es sehen willst
-                # yield f"[INNER CUSTOM]: {data}".encode("utf-8")
-                # yield b"\n\n"
+                yield f"-------------- [INNER CUSTOM]: {data}".encode("utf-8")
+                yield b"\n\n"
 
                 continue  # ganz wichtig: nicht in updates-Logik fallen
 
@@ -120,7 +118,6 @@ class ConfiguredAgent:
                 continue
 
             assert stream_mode == "updates"
-            # data: dict[source, update_dict]
             for _source, update in data.items():  # type: ignore[union-attr]
                 if not isinstance(update, dict):
                     continue
@@ -152,14 +149,14 @@ class ConfiguredAgent:
                                 continue
                             emitted_toolcall_ids.add(tc_id)
                             tool_name = tc.get("name", "unknown_tool")
-                            marker = f"[CALLING TOOL:{tool_name}....]"
+                            marker = f"[+++ CALLING TOOL:{tool_name}....]"
                             async for chunk in artificial_stream(marker, pause=0.04):
                                 yield chunk
                             yield b"\n\n"
 
                     # CASE TOOLCALL MADE
                     elif isinstance(last, ToolMessage):
-                        marker = f"[TOOLCALL DONE: {last.name}....]"
+                        marker = f"[+++ TOOLCALL DONE: {last.name}....]"
                         async for chunk in artificial_stream(marker, pause=0.04):
                             yield chunk
                         yield b"\n\n"
@@ -209,10 +206,10 @@ class AgentFactory:
         self,
     ):
         self.llm = model
-    
-    def _charge_agent(
-        self, name: str, entry: CompleteAgent
-    ) -> ConfiguredAgent:
+
+    def _charge_runnable_agent(
+        self, name: str, complete_config: CompleteAgentConfig
+    ) -> RunnableAgent:
         """Constructs a fully configured agent by resolving its definition from the registry.
 
         The method looks up the specified agent name, loads its configuration and tool schemas,
@@ -232,20 +229,20 @@ class AgentFactory:
         Returns:
             ConfiguredAgent: the constructed agent instance built from registry config and tool definitions.
         """
-        config: AgentConfig = entry.config
+        behaviour_conf: AgentBehaviourConfig = complete_config.behaviour_config
 
         ################################################################### charge tools (inject)
         tools: List[StructuredTool] = self._charge_tools(
-            tool_schemas=entry.tool_schemas, agents_as_tools=entry.agents_as_tools
+            tool_schemas=complete_config.tool_schemas,
+            agents_as_tools=complete_config.agents_as_tools,
         )
 
         ################################################################### construct agent (build)
-        description = entry.description + f"\nconfig: {config.name}:" + f"{config.description}"
-        agent: ConfiguredAgent = self._create_configured_agent(
-            config=config,
+        agent: RunnableAgent = self._create_runnable_agent(
+            behaviour_config=behaviour_conf,
             tools=tools,
-            description=description,
-            name=name
+            description=complete_config.description,
+            name=name,
         )
 
         logger.debug(f"[AGENT CREATION] Successfully created agent {name}")
@@ -261,13 +258,13 @@ class AgentFactory:
         all_tools = mcp_tools + agents_as_tools
         return all_tools
 
-    def _create_configured_agent(
+    def _create_runnable_agent(
         self,
-        config: AgentConfig,
+        behaviour_config: AgentBehaviourConfig,
         tools: list[Any],
         description: str = "",
         name: str = "",
-    ) -> ConfiguredAgent:
+    ) -> RunnableAgent:
         """Builds a ConfiguredAgent from a flat serializable config + factory-wired middleware."""
 
         ################################################# assemble middleware
@@ -282,28 +279,30 @@ class AgentFactory:
         #################### loop control middleware
         loopcontrol_middleware: list[Any] = []
 
-        if config.only_one_model_call:
+        if behaviour_config.only_one_model_call:
             loopcontrol_middleware.append(OnlyOneModelCallMiddlewareSync())
 
-        if config.max_toolcalls is not None:
-            if config.max_toolcalls < 0:
+        if behaviour_config.max_toolcalls is not None:
+            if behaviour_config.max_toolcalls < 0:
                 raise ValueError("max_toolcalls must be >= 0 or None")
-            loopcontrol_middleware.append(global_toolcall_limit_sync(config.max_toolcalls))
+            loopcontrol_middleware.append(
+                global_toolcall_limit_sync(behaviour_config.max_toolcalls)
+            )
 
         if (
-            config.toolbased_answer_prompt is not None
-            or config.direct_answer_prompt is not None
+            behaviour_config.toolbased_answer_prompt is not None
+            or behaviour_config.direct_answer_prompt is not None
         ):
             effective_toolbased_prompt = (
-                config.toolbased_answer_prompt
-                if config.toolbased_answer_prompt is not None
-                else config.system_prompt
+                behaviour_config.toolbased_answer_prompt
+                if behaviour_config.toolbased_answer_prompt is not None
+                else behaviour_config.system_prompt
             )
 
             effective_direct_prompt = (
-                config.direct_answer_prompt
-                if config.direct_answer_prompt is not None
-                else config.system_prompt
+                behaviour_config.direct_answer_prompt
+                if behaviour_config.direct_answer_prompt is not None
+                else behaviour_config.system_prompt
             )
 
             loopcontrol_middleware.extend(
@@ -316,8 +315,8 @@ class AgentFactory:
         #################### validation middleware
         validation_middleware: list[Any] = [
             configured_validator_async(
-                directanswer_validation_prompt=config.directanswer_validation_sysprompt,
-                allow_direct_answers=config.directanswer_allowed,
+                directanswer_validation_prompt=behaviour_config.directanswer_validation_sysprompt,
+                allow_direct_answers=behaviour_config.directanswer_allowed,
             )
         ]
 
@@ -331,13 +330,15 @@ class AgentFactory:
         agent: CompiledStateGraph = create_agent(
             model=self.llm,
             tools=tools,
-            system_prompt=config.system_prompt,
-            middleware=cast(Sequence[AgentMiddleware[AgentState[Any], None]], complete_middleware),
+            system_prompt=behaviour_config.system_prompt,
+            middleware=cast(
+                Sequence[AgentMiddleware[AgentState[Any], None]], complete_middleware
+            ),
         )
 
-        return ConfiguredAgent(
+        return RunnableAgent(
             langchain_agent=agent,
-            config=config,
+            config=behaviour_config,
             description=description,
             name=name,
         )
