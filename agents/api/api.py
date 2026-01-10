@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Literal
+from typing import Dict, Literal, List
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
@@ -10,7 +10,7 @@ from agents.api.utils import assemble_agent, use_test_agent
 from agents.factory.factory import RunnableAgent
 from agents.factory.utils import artificial_stream
 from agents.mcp_client.client import MCPClient
-from agents.models.api import GetToolsRequest, StreamAgentRequest
+from agents.models.api import GetToolsRequest, StreamAgentRequest, ChatMessage
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -43,20 +43,20 @@ async def get_tools(req: GetToolsRequest):
 
 ###################################################################### CALL AGENT
 
-MODE: Literal["true_stream" , "simulated_stream"] = "true_stream"
+MODE: Literal["true_stream" , "simulated_stream"] = "simulated_stream"
 TEST_AGENTS_AS_TOOL: bool = True
 
 @app.post("/stream-test")
 async def stream_test(payload: StreamAgentRequest):
     # Plain text stream
     answer: str = ""
-    message: str = ""
+    messages: List[ChatMessage]
     agent: RunnableAgent
     if MODE == "simulated_stream":
         try:
-            message = payload.message
+            messages = payload.messages
             agent = assemble_agent(payload)
-            result: str | Dict = await agent.run(query=message)
+            result: str | Dict = await agent.run(messages=messages)
             assert isinstance(result, Dict)
             if result["agent_output_aborted"]:
                 answer = f"Agent response was aborted for the following reason: {result['agent_output_abortion_reason']}"

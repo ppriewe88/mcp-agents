@@ -28,7 +28,7 @@ async def test_final_integration():
     agent: RunnableAgent = factory._charge_runnable_agent(
         name="Test", complete_config=numberone_entry
     )
-    result = await agent.run(query="addiere 2 und 5")
+    result = await agent.run(messages="addiere 2 und 5")
     print(result)  # type: ignore[index]
 
     print("#####################################")
@@ -38,13 +38,13 @@ async def test_final_integration():
     agent: RunnableAgent = factory._charge_runnable_agent(
         name="Test", complete_config=numberone_entry
     )
-    result = await agent.run(query="Wann ist der weihnachtsmanng eboren?")
+    result = await agent.run(messages="Wann ist der weihnachtsmanng eboren?")
     print(result)  # type: ignore[index]
 
     print("#####################################")
 
     # NUMBERTWO
-    result = await agent.run(query="Ich will Santas geheimnisse wissen!")
+    result = await agent.run(messages="Ich will Santas geheimnisse wissen!")
     print(result)  # type: ignore[index]
 
     print("#####################################")

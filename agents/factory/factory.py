@@ -30,6 +30,7 @@ from agents.models.agents import (
     CompleteAgentConfig,
     PromptMarkers,
 )
+from agents.models.api import ChatMessage
 from agents.models.extended_state import CustomStateShared
 from agents.models.tools import ToolSchema
 
@@ -82,11 +83,11 @@ class RunnableAgent:
             validated_agent_output=None,
         )
 
-    async def run(self, query: str) -> str | dict[str, Any]:
+    async def run(self, messages: List[ChatMessage]) -> str | dict[str, Any]:
         """Executes the configured agent using a message."""
         extended_state = self.initial_state
-        extended_state["messages"] = [HumanMessage(query)]
-        extended_state["query"] = query
+        extended_state["messages"] = [HumanMessage(messages)]
+        extended_state["query"] = messages
 
         result = await self.agent.ainvoke(extended_state)
 
