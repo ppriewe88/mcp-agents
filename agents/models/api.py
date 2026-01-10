@@ -4,11 +4,15 @@ from pydantic import BaseModel
 
 from agents.models.agents import AgentBehaviourConfig
 from agents.models.tools import ToolSchema
+from enum import Enum
 
+class ChatRole(str, Enum):
+    user = "user"
+    ai = "ai"
 
 class ChatMessage(BaseModel):
     id: str
-    role: Literal["user", "ai"]
+    role: ChatRole
     content: str
 
 class GetToolsRequest(BaseModel):

@@ -43,7 +43,7 @@ async def get_tools(req: GetToolsRequest):
 
 ###################################################################### CALL AGENT
 
-MODE: Literal["true_stream" , "simulated_stream"] = "simulated_stream"
+MODE: Literal["true_stream" , "simulated_stream"] = "true_stream"
 TEST_AGENTS_AS_TOOL: bool = True
 
 @app.post("/stream-test")
@@ -55,7 +55,10 @@ async def stream_test(payload: StreamAgentRequest):
     if MODE == "simulated_stream":
         try:
             messages = payload.messages
-            agent = assemble_agent(payload)
+            if TEST_AGENTS_AS_TOOL:
+                agent = use_test_agent()
+            else:
+                agent = assemble_agent(payload)
             result: str | Dict = await agent.run(messages=messages)
             assert isinstance(result, Dict)
             if result["agent_output_aborted"]:
@@ -67,25 +70,25 @@ async def stream_test(payload: StreamAgentRequest):
             )
         
         except Exception as error:
-            answer = "Ooops, something went wrong in the backend...!"
-            logger.error(f"[API] {answer}. \n error: {error}")
+            stream = "Ooops, something went wrong in the backend...!"
+            logger.error(f"[API] {stream}. \n error: {error}")
         
         return stream
     
     if MODE == "true_stream":
         try:
-            message = payload.message
+            messages = payload.messages
             if TEST_AGENTS_AS_TOOL:
                 agent = use_test_agent()
             else:
                 agent = assemble_agent(payload)
             stream = StreamingResponse(
-                agent.outer_astream(message),
+                agent.outer_astream(messages),
                 media_type="text/plain",
             )
         except Exception as error:
-            answer = "Agent charging failed!"
-            logger.error(f"[API] {answer}. \n error: {error}")
+            stream = "Ooops, something went wrong in the backend...!"
+            logger.error(f"[API] {stream}. \n error: {error}")
 
         return stream
 

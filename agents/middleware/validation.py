@@ -19,7 +19,9 @@ from agents.models.agents import (
     LoopStatus,
     ValidatedAgentResponse,
 )
+from agents import configure_logging
 
+configure_logging(level=logging.INFO)
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
@@ -81,7 +83,7 @@ class AgentResponseValidator:
                 "agent_text": agent_response,
             }
         )
-        logger.debug(f"[VALIDATION] last message is useable: {result.usable}")
+        logger.info(f"[VALIDATION] last message is useable: {result.usable}")
         return result
 
     async def validate_agent_response(
@@ -129,7 +131,7 @@ class AgentResponseValidator:
         # DIRECT_ANSWER
         if answer_type == LoopStatus.DIRECT_ANSWER:
             if not allow_direct_answers:
-                logger.debug("[VALIDATION] No direct answers allowed. Abort")
+                logger.info("[VALIDATION] No direct answers allowed. Abort")
                 return ValidatedAgentResponse(
                     response=None,
                     valid=False,
@@ -137,7 +139,7 @@ class AgentResponseValidator:
                     type=LoopStatus.ABORTED,
                 )
             else:
-                logger.debug("[VALIDATION] Direct answers allowed. Validating direct answer.")
+                logger.info("Direct answers allowed. Validating direct answer.")
                 usability_check = self._validate_usability_of_direct_answer(last_message.text)
                 if not usability_check.usable:
                     return ValidatedAgentResponse(

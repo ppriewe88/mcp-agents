@@ -9,6 +9,7 @@ from langchain.messages import (
     AnyMessage,
     HumanMessage,
     ToolMessage,
+    SystemMessage
 )
 from langchain_core.tools.structured import StructuredTool
 from langgraph.graph.state import CompiledStateGraph, StateT
@@ -30,7 +31,7 @@ from agents.models.agents import (
     CompleteAgentConfig,
     PromptMarkers,
 )
-from agents.models.api import ChatMessage
+from agents.models.api import ChatMessage, ChatRole
 from agents.models.extended_state import CustomStateShared
 from agents.models.tools import ToolSchema
 
@@ -59,12 +60,12 @@ class RunnableAgent:
     def __init__(
         self,
         langchain_agent: CompiledStateGraph,
-        config: AgentBehaviourConfig,
+        behaviour_config: AgentBehaviourConfig,
         name: Optional[str] = None,
         description: str = "",
     ):
         self.agent: CompiledStateGraph[StateT] = langchain_agent  # type: ignore[valid-type]
-        self.config: AgentBehaviourConfig = config
+        self.behaviour_config: AgentBehaviourConfig = behaviour_config
         self.name: str = name or ""
         self.description = description
         self.initial_state = CustomStateShared(
@@ -86,18 +87,21 @@ class RunnableAgent:
     async def run(self, messages: List[ChatMessage]) -> str | dict[str, Any]:
         """Executes the configured agent using a message."""
         extended_state = self.initial_state
-        extended_state["messages"] = [HumanMessage(messages)]
-        extended_state["query"] = messages
+        extended_state["messages"] = self._construct_thread(messages)
+        extended_state["query"] = messages[-1].content
 
         result = await self.agent.ainvoke(extended_state)
 
         return result
 
-    async def outer_astream(self, query: str) -> AsyncGenerator[bytes, None]:
+    async def outer_astream(
+            self, 
+            messages: List[ChatMessage]
+            ) -> AsyncGenerator[bytes, None]:
         """Executes the configured agent using a message."""
         extended_state = self.initial_state
-        extended_state["messages"] = [HumanMessage(query)]
-        extended_state["query"] = query
+        extended_state["messages"] = self._construct_thread(messages)
+        extended_state["query"] = messages[-1].content
 
         emitted_toolcall_ids: set[str] = set()
         emitted_final = False
@@ -185,6 +189,24 @@ class RunnableAgent:
                         yield chunk
                     return
 
+    def _construct_thread(
+            self, 
+            messages: List[ChatMessage]
+            ) -> List[AIMessage | SystemMessage | HumanMessage]:
+        """Construct langchain message list from frontend input."""
+        thread: list[SystemMessage | HumanMessage | AIMessage] = [
+            SystemMessage(self.behaviour_config.system_prompt)
+        ]
+        for message in messages:
+            match message.role:
+                case ChatRole.user:
+                    thread.append(HumanMessage(message.content))
+                case ChatRole.ai:
+                    thread.append(AIMessage(message.content))
+                case _:
+                    raise ValueError(f"Unsupported role: {message.role}")
+        return thread
+         
 class AgentFactory:
     """Provides a unified mechanism for constructing fully configured agents.
 
@@ -333,7 +355,7 @@ class AgentFactory:
 
         return RunnableAgent(
             langchain_agent=agent,
-            config=behaviour_config,
+            behaviour_config=behaviour_config,
             description=description,
             name=name,
         )

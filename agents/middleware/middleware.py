@@ -336,6 +336,7 @@ def configured_validator_async(
             if isinstance(message, AIMessage)
             or isinstance(message, HumanMessage)
             or isinstance(message, ToolMessage)
+            or isinstance(message, SystemMessage)
         ]
         assert len(messages_raw) == len(available_messages)
 

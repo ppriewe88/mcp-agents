@@ -51,8 +51,8 @@ def use_test_agent() -> RunnableAgent:
                 description="""Inner agent. Useful for arithmetic operations like adding numbers.""",
                 system_prompt="Use your tools to answer the user query",
                 only_one_model_call=False,
-                directanswer_validation_sysprompt="direct answer is always usable",
-                directanswer_allowed = False,
+                directanswer_validation_sysprompt="Any text is usable, so please always return true for the useability",
+                directanswer_allowed = True,
                 toolbased_answer_prompt="Summarize your toolcall results in a nice and fancy catch phrase!"
             ),
             tool_schemas=[schema_add, schema_birthday],
@@ -80,7 +80,7 @@ def use_test_agent() -> RunnableAgent:
             - you can use the other tools as well.
             - If no tool mathes, let the user know. Also let him know, if you need inputs that are not given.""",
             only_one_model_call=False,
-            directanswer_validation_sysprompt="direct answer is always usable",
+            directanswer_validation_sysprompt="Any text is usable, so please always return true for the useability",
             directanswer_allowed = True,
             toolbased_answer_prompt="""Summarize your tooling responses. 
             If you have received infos from a sub agent, cite him and make clear what he  told you!"""
