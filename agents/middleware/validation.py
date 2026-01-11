@@ -129,7 +129,7 @@ class AgentResponseValidator:
 
         # DIRECT_ANSWER
         if answer_type == LoopStatus.DIRECT_ANSWER:
-            logger.info("Validating direct answer.")
+            logger.info("[VALIDATION] Validating direct answer")
             usability_check = self._validate_usability_of_direct_answer(last_message.text)
             if not usability_check.usable:
                 return ValidatedAgentResponse(
