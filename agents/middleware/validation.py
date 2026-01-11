@@ -85,12 +85,12 @@ class AgentResponseValidator:
         Distinguishes different cases for agent response content.
         For each case, goes through different validation logic.
         """
-        ############################## extract relevant messages for case distinctions
+        # extract relevant messages for case distinctions
         last_message = messages[-1]
         tool_messages: List[ToolMessage] = [
             message for message in messages if isinstance(message, ToolMessage)
         ]
-        ######################## detect agent answer type
+        # detect agent answer type
         detected: DetectedStatus = detect_loop_status(messages)
         answer_type = detected.type
         abortion_code = detected.abortion_code or AbortionCodes.UNKNOWN

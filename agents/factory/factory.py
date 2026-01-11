@@ -257,7 +257,7 @@ class AgentFactory:
         ################################################################### charge tools (inject)
         tools: List[StructuredTool] = self._charge_tools(
             tool_schemas=complete_config.tool_schemas,
-            agents_as_tools=complete_config.agents_as_tools,
+            subagents=complete_config.subagents,
         )
 
         ################################################################### construct agent (build)
@@ -272,13 +272,13 @@ class AgentFactory:
         return agent
 
     def _charge_tools(
-        self, tool_schemas: List[ToolSchema], agents_as_tools: List[Any]
+        self, tool_schemas: List[ToolSchema], subagents: List[Any]
     ) -> List[StructuredTool]:
         """Creates tools with container class methodology. Injects mandatory and optional data."""
         ############################################################## build tool container
         tool_container = MCPToolContainer(schemas=tool_schemas)
         mcp_tools: List[StructuredTool] = list(tool_container.tools_agent.values())
-        all_tools = mcp_tools + agents_as_tools
+        all_tools = mcp_tools + subagents
         return all_tools
 
     def _create_runnable_agent(

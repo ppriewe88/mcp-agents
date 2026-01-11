@@ -1,6 +1,6 @@
 from typing import List
 
-from agents.containers.agents_as_tools import AgentAsToolContainer
+from agents.containers.subagents import AgentAsToolContainer
 from agents.factory.factory import AgentFactory, RunnableAgent
 from agents.models.agents import AgentBehaviourConfig, CompleteAgentConfig
 from agents.models.api import StreamAgentRequest
@@ -65,7 +65,7 @@ def use_test_agent() -> RunnableAgent:
         complete_config=inner_agent_configuration
     )
 
-    agents_as_tools = AgentAsToolContainer(
+    subagents = AgentAsToolContainer(
         agents = [inner_agent]
     )
 
@@ -87,7 +87,7 @@ def use_test_agent() -> RunnableAgent:
             directanswer_validation_sysprompt="""Answer is usable (valid) exactly if it contains the word "cucumber"!"""
         ),
         tool_schemas=[schema_shopping_list],
-        agents_as_tools = list(agents_as_tools.tools_for_agent.values())
+        subagents = list(subagents.subagents.values())
     )
 
     outer_agent: RunnableAgent = factory._charge_runnable_agent(

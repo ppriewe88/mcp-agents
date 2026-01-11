@@ -35,7 +35,7 @@ class CompleteAgentConfig(BaseModel):
     description: str
     behaviour_config: AgentBehaviourConfig
     tool_schemas: list[ToolSchema]
-    agents_as_tools: List[Any] = []
+    subagents: List[Any] = []
 
 class AbortionCodes(str, Enum):
     """Enum of agent response abortion reasons."""

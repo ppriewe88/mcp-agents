@@ -43,54 +43,28 @@ async def get_tools(req: GetToolsRequest):
 
 ###################################################################### CALL AGENT
 
-MODE: Literal["true_stream" , "simulated_stream"] = "true_stream"
 TEST_AGENTS_AS_TOOL: bool = True
 
 @app.post("/stream-test")
 async def stream_test(payload: StreamAgentRequest):
     # Plain text stream
-    answer: str = ""
     messages: List[ChatMessage]
     agent: RunnableAgent
-    if MODE == "simulated_stream":
-        try:
-            messages = payload.messages
-            if TEST_AGENTS_AS_TOOL:
-                agent = use_test_agent()
-            else:
-                agent = assemble_agent(payload)
-            result: str | Dict = await agent.run(messages=messages)
-            assert isinstance(result, Dict)
-            if result["agent_output_aborted"]:
-                answer = f"Agent response was aborted for the following reason: {result['agent_output_abortion_reason']}"
-            else: 
-                answer = result["validated_agent_output"]
-            stream = StreamingResponse(
-                artificial_stream(answer, pause=0.02), media_type="text/plain"
-            )
-        
-        except Exception as error:
-            stream = "Ooops, something went wrong in the backend...!"
-            logger.error(f"[API] {stream}. \n error: {error}")
-        
-        return stream
-    
-    if MODE == "true_stream":
-        try:
-            messages = payload.messages
-            if TEST_AGENTS_AS_TOOL:
-                agent = use_test_agent()
-            else:
-                agent = assemble_agent(payload)
-            stream = StreamingResponse(
-                agent.outer_astream(messages),
-                media_type="text/plain",
-            )
-        except Exception as error:
-            stream = "Ooops, something went wrong in the backend...!"
-            logger.error(f"[API] {stream}. \n error: {error}")
+    try:
+        messages = payload.messages
+        if TEST_AGENTS_AS_TOOL:
+            agent = use_test_agent()
+        else:
+            agent = assemble_agent(payload)
+        stream = StreamingResponse(
+            agent.outer_astream(messages),
+            media_type="text/plain",
+        )
+    except Exception as error:
+        stream = "Ooops, something went wrong in the backend...!"
+        logger.error(f"[API] {stream}. \n error: {error}")
 
-        return stream
+    return stream
 
 
 

@@ -1,6 +1,6 @@
 import asyncio
 
-from agents.containers.agents_as_tools import AgentAsToolContainer
+from agents.containers.subagents import AgentAsToolContainer
 from agents.factory.factory import AgentFactory, RunnableAgent
 from agents.models.agents import AgentBehaviourConfig, CompleteAgentConfig
 from tests.schemas import schema_add
@@ -44,7 +44,7 @@ outer_agent_configuration = CompleteAgentConfig(
         If you have received infos from a sub agent, cite him and make clear what he  told you!"""
     ),
     tool_schemas=[],
-    agents_as_tools = list(agents_as_tools.tools_for_agent.values())
+    subagents = list(agents_as_tools.subagents.values())
 )
 
 outer_agent: RunnableAgent = factory._charge_runnable_agent(
