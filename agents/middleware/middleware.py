@@ -99,7 +99,7 @@ class AbortOnToolErrors(AgentMiddleware):
                 "toolcall_error": True,
                 "error_toolname": f"{last_message.name}",
                 "agent_output_aborted": True,
-                "agent_output_abortion_reason": AbortionCodes.TOOL_ERROR,
+                "agent_output_abortion_reason": AbortionCodes.TOOL_ERROR.value,
                 "agent_output_description": None,
                 "validated_agent_output": AbortionCodes.TOOL_ERROR.value,
                 "jump_to": "end"

@@ -133,7 +133,7 @@ class RunnableAgent:
                         update.get("agent_output_abortion_reason")
                         or "validation rejected"
                     )
-                    yield f"[ABORTED:{reason}]".encode("utf-8")
+                    yield f"[ABORTED: {reason}]".encode("utf-8")
                     return
 
                 # CASE NEW MESSAGE
