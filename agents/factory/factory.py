@@ -113,23 +113,97 @@ class RunnableAgent:
         ):
             ########################################### CUSTOM EVENTS FROM SUBAGENTS
             if stream_mode == "custom":
-                # data is dict sent by inner agent's stream writer
-                print("[DEBUG][CUSTOM EVENT]:", data)
+                # check chunk type
+                chunk: Optional[InnerStreamChunk] = None
+                try:
+                    chunk = InnerStreamChunk.model_validate(data)
+                except Exception:
+                    chunk = None
+                
+                if chunk is None: 
+                    yield f"-------------- [CUSTOM STREAM UNKNOWN EVENT]: {data}".encode("utf-8")
+                    yield b"\n\n"
+                    continue
+                
+                ############## handle subagent/nested_agent chunks explicitly; others are debugged above
+                match (chunk.type, chunk.event):
 
-                yield f"-------------- [INNER CUSTOM]: {data}".encode("utf-8")
-                yield b"\n\n"
+                    ########################## START 
+                    case ("subagent", InnerStreamEvent.START) | ("nested_agent", InnerStreamEvent.START):
+                        marker = f"[SUBAGENT START: {chunk.subagent}....]"
+                        async for b in artificial_stream(marker, pause=0.04):
+                            yield b
+                        yield b"\n\n"
 
-                continue  # ganz wichtig: nicht in updates-Logik fallen
+                    ########################## TOOL REQUEST
+                    case ("subagent", InnerStreamEvent.TOOL_REQUEST) | ("nested_agent", InnerStreamEvent.TOOL_REQUEST):
+                        tool_name = chunk.tool_name or "unknown_tool"
+                        toolcall_id = chunk.toolcall_id
+                        marker = (
+                            f"[SUBAGENT CALLING TOOL: {chunk.subagent}::{tool_name}"
+                            + (f" (id={toolcall_id})" if toolcall_id else "")
+                            + "....]"
+                        )
+                        async for b in artificial_stream(marker, pause=0.04):
+                            yield b
+                        yield b"\n\n"
 
+                    ########################## TOOL RESULT
+                    case ("subagent", InnerStreamEvent.TOOL_RESULT) | ("nested_agent", InnerStreamEvent.TOOL_RESULT):
+                        tool_name = chunk.tool_name or "unknown_tool"
+                        marker = f"[SUBAGENT TOOLCALL DONE: {chunk.subagent}::{tool_name}....]"
+                        async for b in artificial_stream(marker, pause=0.04):
+                            yield b
+                        yield b"\n\n"
+
+                    ########################## FINAL ANSWER
+                    case ("subagent", InnerStreamEvent.FINAL) | ("nested_agent", InnerStreamEvent.FINAL):
+                        # Optional: stream inner final answer as progress info.
+                        # IMPORTANT: do NOT return here (outer final answer comes from outer validated output)
+                        text = chunk.final_answer
+                        if isinstance(text, str) and text:
+                            header = f"[SUBAGENT FINAL: {chunk.subagent}]"
+                            async for b in artificial_stream(header, pause=0.02):
+                                yield b
+                            yield b"\n"
+                            async for b in artificial_stream(text, pause=0.02):
+                                yield b
+                            yield b"\n\n"
+                        else:
+                            yield f"[SUBAGENT FINAL: {chunk.subagent} (no text)]".encode("utf-8")
+                            yield b"\n\n"
+
+                    ########################## ABORTION
+                    case ("subagent", InnerStreamEvent.ABORTED) | ("nested_agent", InnerStreamEvent.ABORTED):
+                        reason = chunk.abortion_reason or "aborted!"
+                        yield f"[INNER AGENT ABORTED: {reason}]".encode("utf-8")
+                        return
+
+                    ########################## CUSTOM
+                    case ("subagent", InnerStreamEvent.CUSTOM) | ("nested_agent", InnerStreamEvent.CUSTOM):
+                        yield (
+                            f"-------------- [NESTED SUBAGENT CUSTOM:{chunk.subagent}]: {chunk.data}"
+                        ).encode("utf-8")
+                        yield b"\n\n"
+
+                    ########################## FALLBACK
+                    case _:
+                        yield f"-------------- [SUBAGENT UNKNOWN EVENT:{chunk.subagent}]: {data}".encode("utf-8")
+                        yield b"\n\n"
+
+                continue  # important: do not fall into updates logic!
+            
+            ########################################### OUTER AGENT MESSAGE CHUNKS
             if stream_mode == "messages":
                 continue
 
+            ########################################### OUTER AGENT MESSAGE UPDATES
             assert stream_mode == "updates"
             for _source, update in data.items():  # type: ignore[union-attr]
                 if not isinstance(update, dict):
                     continue
 
-                # CASE VALIDATOR ABORT
+                ########### CASE VALIDATOR ABORT
                 if update.get("agent_output_aborted") is True:
                     reason = (
                         update.get("agent_output_abortion_reason")
@@ -138,12 +212,12 @@ class RunnableAgent:
                     yield f"[ABORTED: {reason}]".encode("utf-8")
                     return
 
-                # CASE NEW MESSAGE
+                ########### CASE NEW MESSAGE
                 msgs = update.get("messages")
                 if msgs:
                     last: AnyMessage = msgs[-1]
 
-                    # CASE TOOLCALL REQUESTED
+                    ###### CASE TOOLCALL REQUESTED
                     if isinstance(last, AIMessage) and getattr(
                         last, "tool_calls", None
                     ):
@@ -161,19 +235,19 @@ class RunnableAgent:
                                 yield chunk
                             yield b"\n\n"
 
-                    # CASE TOOLCALL MADE
+                    ###### CASE TOOLCALL MADE
                     elif isinstance(last, ToolMessage):
                         marker = f"[+++ TOOLCALL DONE: {last.name}....]"
                         async for chunk in artificial_stream(marker, pause=0.04):
                             yield chunk
                         yield b"\n\n"
 
-                # CASE NOT FINAL ANSWER YET
+                ########### CASE NOT FINAL ANSWER YET
                 validated: Optional[Any] = update.get("validated_agent_output")
                 if validated is None or emitted_final:
                     continue
 
-                # CASE FINAL ANSWER
+                ########### CASE FINAL ANSWER
                 text: Optional[str] = None
                 if isinstance(validated, AIMessage):
                     if isinstance(validated.content, str):
