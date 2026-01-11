@@ -15,7 +15,6 @@ inner_agent_configuration = CompleteAgentConfig(
             system_prompt="You are a math agent. you can call tools like 'add' do answer the user query",
             only_one_model_call=False,
             directanswer_validation_sysprompt="direct answer is always usable",
-            directanswer_allowed = False,
             toolbased_answer_prompt="Summarize your toolcall results in a nice and fancy catch phrase!"
         ),
         tool_schemas=[schema_add],
@@ -41,7 +40,6 @@ outer_agent_configuration = CompleteAgentConfig(
         system_prompt="You are a math agent. you can call tools like 'add' do answer the user query",
         only_one_model_call=False,
         directanswer_validation_sysprompt="direct answer is always usable",
-        directanswer_allowed = False,
         toolbased_answer_prompt="""Summarize your tooling responses. 
         If you have received infos from a sub agent, cite him and make clear what he  told you!"""
     ),

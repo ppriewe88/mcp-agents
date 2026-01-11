@@ -89,7 +89,6 @@ class AgentResponseValidator:
     async def validate_agent_response(
         self,
         messages: List[AIMessage | ToolMessage | HumanMessage],
-        allow_direct_answers: bool
     ) ->  ValidatedAgentResponse:
         """Validates agent response.
 
@@ -130,29 +129,20 @@ class AgentResponseValidator:
 
         # DIRECT_ANSWER
         if answer_type == LoopStatus.DIRECT_ANSWER:
-            if not allow_direct_answers:
-                logger.info("[VALIDATION] No direct answers allowed. Abort")
+            logger.info("Validating direct answer.")
+            usability_check = self._validate_usability_of_direct_answer(last_message.text)
+            if not usability_check.usable:
                 return ValidatedAgentResponse(
-                    response=None,
-                    valid=False,
-                    abortion_code=AbortionCodes.DIRECT_ANSWERS_FORBIDDEN,
-                    type=LoopStatus.ABORTED,
-                )
+                    response = None,
+                    valid = False,
+                    abortion_code = AbortionCodes.DIRECT_ANSWER_UNUSABLE,
+                    type = LoopStatus.ABORTED)
             else:
-                logger.info("Direct answers allowed. Validating direct answer.")
-                usability_check = self._validate_usability_of_direct_answer(last_message.text)
-                if not usability_check.usable:
-                    return ValidatedAgentResponse(
-                        response = None,
-                        valid = False,
-                        abortion_code = AbortionCodes.DIRECT_ANSWER_UNUSABLE,
-                        type = LoopStatus.ABORTED)
-                else:
-                    return ValidatedAgentResponse(
-                        response = last_message.text,
-                        valid = True,
-                        type = LoopStatus.DIRECT_ANSWER
-                        )
+                return ValidatedAgentResponse(
+                    response = last_message.text,
+                    valid = True,
+                    type = LoopStatus.DIRECT_ANSWER
+                    )
 
         # TOOLCALLS_WITH_FINAL_ANSWER:
         if answer_type == LoopStatus.TOOL_BASED_ANSWER:

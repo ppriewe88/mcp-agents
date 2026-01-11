@@ -296,7 +296,6 @@ def override_final_agentprompt_async(
 ############################################################### validate answer (after agent)
 def configured_validator_async(
     directanswer_validation_prompt: str = SYSTEM_PROMPT_VALIDATOR_USABILITY,
-    allow_direct_answers: bool = True,
 ):
     """Creates async post-agent middleware that validates direct agent (without toolcalls) output for usability.
 
@@ -305,7 +304,6 @@ def configured_validator_async(
 
     Args:
         system_prompt_usability (str): System prompt used for the usability validation model call.
-        allow_direct_answers (bool): Whether to accept direct answers as usable output.
 
     Returns:
         Callable: An async middleware function that stores the validated agent output in the state.
@@ -349,7 +347,6 @@ def configured_validator_async(
         logger.info(f"[AGENT {agent_name}] Validate agent response")
         agent_output: ValidatedAgentResponse = await validator.validate_agent_response(
             available_messages,
-            allow_direct_answers,
         )
 
         assert agent_output.type is not None

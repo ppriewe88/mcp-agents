@@ -89,7 +89,6 @@ def detect_loop_status(
     ### DIRECT ANSWER
     # last message is AIMessage, but no toolcalls have been made at all
     # ONLY, when only one model call was made (with no tool calls).
-    # If direct answers allowed, validate. Else, abort
     if (
         isinstance(last_message, AIMessage)
         and len(tool_messages) == 0

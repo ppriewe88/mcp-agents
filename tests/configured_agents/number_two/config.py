@@ -18,7 +18,6 @@ numbertwo_entry = CompleteAgentConfig(
         toolbased_answer_prompt=AGENTPROMPT_TOOLBASED_ANSWER,
         direct_answer_prompt=AGENTPROMPT_INITIAL,
         directanswer_validation_sysprompt=AGENTPROMPT_INITIAL,
-        directanswer_allowed=False,
     ),
     tool_schemas=[schema_birthday, schema_more_info_on_santa],
 )
