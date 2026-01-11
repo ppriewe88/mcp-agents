@@ -43,7 +43,7 @@ async def get_tools(req: GetToolsRequest):
 
 ###################################################################### CALL AGENT
 
-MODE: Literal["true_stream" , "simulated_stream"] = "simulated_stream"
+MODE: Literal["true_stream" , "simulated_stream"] = "true_stream"
 TEST_AGENTS_AS_TOOL: bool = False
 
 @app.post("/stream-test")
@@ -52,7 +52,7 @@ async def stream_test(payload: StreamAgentRequest):
     answer: str = ""
     messages: List[ChatMessage]
     agent: RunnableAgent
-    if MODE == "true_stream":
+    if MODE == "simulated_stream":
         try:
             messages = payload.messages
             if TEST_AGENTS_AS_TOOL:
