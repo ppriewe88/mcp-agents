@@ -31,6 +31,7 @@ from agents.models.agents import (
     CompleteAgentConfig,
     PromptMarkers,
 )
+from agents.models.stream import InnerStreamChunk, InnerStreamEvent
 from agents.models.api import ChatMessage, ChatRole
 from agents.models.extended_state import CustomStateShared
 from agents.models.tools import ToolSchema
@@ -110,6 +111,7 @@ class RunnableAgent:
             extended_state,
             stream_mode=["messages", "updates", "custom"],
         ):
+            ########################################### CUSTOM EVENTS FROM SUBAGENTS
             if stream_mode == "custom":
                 # data is dict sent by inner agent's stream writer
                 print("[DEBUG][CUSTOM EVENT]:", data)
