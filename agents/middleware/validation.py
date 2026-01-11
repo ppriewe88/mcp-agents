@@ -38,16 +38,6 @@ class ValidationOutput(BaseModel):
 class AgentResponseValidator:
     """Validates agent response."""
 
-    DEFAULT_SYSTEM_PROMPT = """Du beurteilst die Antwort eines Toolcalling-Agenten.
-
-        <Anweisungen>:
-        Bestimme, ob die Antwort nicht 'usable' ist.
-
-        Eine Antwort ist nicht usable, wenn:
-        - wenn sie nur sagt, dass kein Tool aufgerufen werden konnte oder gar keine Werkzeuge benutzt wurden.
-        - wenn sie eventuell ganz andere Aussagen und Informationen beinhaltet.
-        """
-
     DEFAULT_HUMAN_PROMPT = """ANTWORT DES AGENTEN:
         {agent_text}
         """
@@ -56,8 +46,8 @@ class AgentResponseValidator:
         self,
         system_prompt_usability: Optional[str] = None,
     ):
-        self.system_prompt_usability = system_prompt_usability or self.DEFAULT_SYSTEM_PROMPT
-        self.human_prompt_usability = self.DEFAULT_HUMAN_PROMPT
+        self.system_prompt_usability_directanswer = system_prompt_usability or None
+        self.human_prompt_usability_directanswer = self.DEFAULT_HUMAN_PROMPT
         self.llm = model
 
     def _build_usability_chain(self):
@@ -66,8 +56,8 @@ class AgentResponseValidator:
 
         prompt = ChatPromptTemplate(
             messages=[
-                SystemMessagePromptTemplate.from_template(self.system_prompt_usability),
-                HumanMessagePromptTemplate.from_template(self.human_prompt_usability),
+                SystemMessagePromptTemplate.from_template(self.system_prompt_usability_directanswer),
+                HumanMessagePromptTemplate.from_template(self.human_prompt_usability_directanswer),
             ],
             input_variables=["agent_text"],
         )
@@ -129,20 +119,28 @@ class AgentResponseValidator:
 
         # DIRECT_ANSWER
         if answer_type == LoopStatus.DIRECT_ANSWER:
-            logger.info("[VALIDATION] Validating direct answer")
-            usability_check = self._validate_usability_of_direct_answer(last_message.text)
-            if not usability_check.usable:
-                return ValidatedAgentResponse(
-                    response = None,
-                    valid = False,
-                    abortion_code = AbortionCodes.DIRECT_ANSWER_UNUSABLE,
-                    type = LoopStatus.ABORTED)
+            if self.system_prompt_usability_directanswer:
+                logger.info("[VALIDATION] Validating direct answer")
+                usability_check = self._validate_usability_of_direct_answer(last_message.text)
+                if not usability_check.usable:
+                    return ValidatedAgentResponse(
+                        response = None,
+                        valid = False,
+                        abortion_code = AbortionCodes.DIRECT_ANSWER_UNUSABLE,
+                        type = LoopStatus.ABORTED)
+                else:
+                    return ValidatedAgentResponse(
+                        response = last_message.text,
+                        valid = True,
+                        type = LoopStatus.DIRECT_ANSWER
+                        )
             else:
+                logger.info("[VALIDAITON] No further validation of direct answer required")
                 return ValidatedAgentResponse(
                     response = last_message.text,
                     valid = True,
                     type = LoopStatus.DIRECT_ANSWER
-                    )
+                )
 
         # TOOLCALLS_WITH_FINAL_ANSWER:
         if answer_type == LoopStatus.TOOL_BASED_ANSWER:

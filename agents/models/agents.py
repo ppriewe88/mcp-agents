@@ -22,8 +22,8 @@ class AgentBehaviourConfig(BaseModel):
     name: str
     description: str = ""
     system_prompt: str
-    directanswer_validation_sysprompt: str
     direct_answer_prompt: Optional[str] = None
+    directanswer_validation_sysprompt: Optional[str] = None
     toolbased_answer_prompt: Optional[str] = None
     max_toolcalls: Optional[int] = None
     only_one_model_call: bool = False

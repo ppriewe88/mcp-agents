@@ -295,7 +295,7 @@ def override_final_agentprompt_async(
 
 ############################################################### validate answer (after agent)
 def configured_validator_async(
-    directanswer_validation_prompt: str = SYSTEM_PROMPT_VALIDATOR_USABILITY,
+    directanswer_validation_prompt: Optional[str] = None,
 ):
     """Creates async post-agent middleware that validates direct agent (without toolcalls) output for usability.
 
@@ -339,18 +339,20 @@ def configured_validator_async(
         assert len(messages_raw) == len(available_messages)
 
         ###################### validator instance
-        validator = AgentResponseValidator(system_prompt_usability=directanswer_validation_prompt)
+        validator = AgentResponseValidator(
+            system_prompt_usability=directanswer_validation_prompt
+            )
 
         ###################### validate
         agent_name = state.get("agent_name")
         assert agent_name is not None
-        logger.info(f"[AGENT {agent_name}] Validate agent response")
+        logger.info(f"[AGENT {agent_name}] Run validation module")
         agent_output: ValidatedAgentResponse = await validator.validate_agent_response(
             available_messages,
         )
 
         assert agent_output.type is not None
-        logger.info(f"[AGENT {agent_name}] Agent response has been validated.")
+        logger.info(f"[AGENT {agent_name}] Validation module end")
         return {
             "agent_output_aborted": not agent_output.valid,
             "agent_output_abortion_reason": (

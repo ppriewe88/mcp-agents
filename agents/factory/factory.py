@@ -332,7 +332,7 @@ class AgentFactory:
         #################### validation middleware
         validation_middleware: list[Any] = [
             configured_validator_async(
-                directanswer_validation_prompt=behaviour_config.directanswer_validation_sysprompt,
+                directanswer_validation_prompt=behaviour_config.directanswer_validation_sysprompt or None,
             )
         ]
 
