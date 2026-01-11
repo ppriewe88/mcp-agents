@@ -44,7 +44,7 @@ async def get_tools(req: GetToolsRequest):
 ###################################################################### CALL AGENT
 
 MODE: Literal["true_stream" , "simulated_stream"] = "true_stream"
-TEST_AGENTS_AS_TOOL: bool = False
+TEST_AGENTS_AS_TOOL: bool = True
 
 @app.post("/stream-test")
 async def stream_test(payload: StreamAgentRequest):
