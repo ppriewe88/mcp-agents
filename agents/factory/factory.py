@@ -111,7 +111,7 @@ class RunnableAgent:
             extended_state,
             stream_mode=["messages", "updates", "custom"],
         ):
-            ########################################### CUSTOM EVENTS FROM SUBAGENTS
+            ########################################### CUSTOM EVENTS FROM SUBAGENTS (SUBTHREAD)
             if stream_mode == "custom":
                 # check chunk type
                 chunk: Optional[InnerStreamChunk] = None
@@ -158,7 +158,6 @@ class RunnableAgent:
 
                     ########################## FINAL ANSWER
                     case ("subagent", InnerStreamEvent.FINAL) | ("nested_agent", InnerStreamEvent.FINAL):
-                        # Optional: stream inner final answer as progress info.
                         # IMPORTANT: do NOT return here (outer final answer comes from outer validated output)
                         text = chunk.final_answer
                         if isinstance(text, str) and text:
@@ -193,11 +192,11 @@ class RunnableAgent:
 
                 continue  # important: do not fall into updates logic!
             
-            ########################################### OUTER AGENT MESSAGE CHUNKS
+            ########################################### OUTER AGENT MESSAGE CHUNKS (SUPPRESS)
             if stream_mode == "messages":
                 continue
 
-            ########################################### OUTER AGENT MESSAGE UPDATES
+            ########################################### OUTER AGENT MESSAGE UPDATES (HIGHEST THREAD)
             assert stream_mode == "updates"
             for _source, update in data.items():  # type: ignore[union-attr]
                 if not isinstance(update, dict):
