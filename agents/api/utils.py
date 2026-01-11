@@ -83,7 +83,8 @@ def use_test_agent() -> RunnableAgent:
             toolbased_answer_prompt="""Summarize your tooling responses. 
             If you have received infos from a sub agent, cite him and make clear what he  told you!""",
             direct_answer_prompt="""If no tools are suitable to help answering the user query:
-            - Politely tell the user, that you cannot answer this questions based on your capabilities (tools)."""
+            - Politely tell the user, that you cannot answer this questions based on your capabilities (tools).""",
+            directanswer_validation_sysprompt="""Answer is usable (valid) exactly if it contains the word "cucumber"!"""
         ),
         tool_schemas=[schema_shopping_list],
         agents_as_tools = list(agents_as_tools.tools_for_agent.values())

@@ -99,7 +99,7 @@ class AgentResponseValidator:
         if answer_type == LoopStatus.ABORTED:
             logger.debug(f"[VALIDATION] current message has been aborted (reason: {abortion_code})")
             return ValidatedAgentResponse(
-                response=None,
+                response=abortion_code.value,
                 valid=False,
                 abortion_code=abortion_code,
                 type=LoopStatus.ABORTED,
@@ -124,7 +124,7 @@ class AgentResponseValidator:
                 usability_check = self._validate_usability_of_direct_answer(last_message.text)
                 if not usability_check.usable:
                     return ValidatedAgentResponse(
-                        response = None,
+                        response = AbortionCodes.DIRECT_ANSWER_UNUSABLE.value,
                         valid = False,
                         abortion_code = AbortionCodes.DIRECT_ANSWER_UNUSABLE,
                         type = LoopStatus.ABORTED)
@@ -156,7 +156,7 @@ class AgentResponseValidator:
 
         # Fallback for safety reasons (should not happen if detector is exhaustive)
         return ValidatedAgentResponse(
-            response=None,
+            response=AbortionCodes.UNKNOWN.value,
             valid=False,
             abortion_code=AbortionCodes.UNKNOWN,
             type=LoopStatus.ABORTED,

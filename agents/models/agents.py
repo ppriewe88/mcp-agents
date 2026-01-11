@@ -40,7 +40,6 @@ class CompleteAgentConfig(BaseModel):
 class AbortionCodes(str, Enum):
     """Enum of agent response abortion reasons."""
 
-    NO_TOOLMATCH = "NO_MATCHING_TOOL_FOUND"
     TOOL_ERROR = "MCP_TOOL_ERROR"
     DIRECT_ANSWER_UNUSABLE = "DIRECT_AGENT_RESPONSE_UNUSABLE"
     HALLUCINATION = "HALLUCINATION_DETECTED"

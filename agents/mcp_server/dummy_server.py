@@ -35,6 +35,7 @@ def add_typed(a: Annotated[int, Field(...,
         b: Annotated[int, Field(..., 
                    description="The second number to add")] = 2) -> int:
     """Add two numbers together"""
+    raise Exception("THIS DID NOT GO WELL!")
     return a + b
 
 @mcp.tool()
