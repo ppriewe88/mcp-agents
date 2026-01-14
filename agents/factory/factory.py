@@ -13,7 +13,7 @@ from langchain.messages import (
 )
 from langchain_core.tools.structured import StructuredTool
 from langgraph.graph.state import CompiledStateGraph, StateT
-
+import json
 from agents.containers.mcp_tools import MCPToolContainer
 from agents.factory.utils import artificial_stream
 from agents.llm.client import model
@@ -121,8 +121,8 @@ class RunnableAgent:
                     chunk = None
                 
                 if chunk is None: 
-                    yield f"-------------- [CUSTOM STREAM UNKNOWN EVENT]: {data}".encode("utf-8")
-                    yield b"\n\n"
+                    yield self._emit_text_ndjson(f"-------------- [CUSTOM STREAM UNKNOWN EVENT]: {data}")
+                    yield self._emit_text_ndjson("\n\n")
                     continue
                 
                 ############## handle subagent/nested_agent chunks explicitly; others are debugged above
@@ -131,9 +131,9 @@ class RunnableAgent:
                     ########################## START 
                     case ("subagent", InnerStreamEvent.START) | ("nested_agent", InnerStreamEvent.START):
                         marker = f"[SUBAGENT START: {chunk.subagent}....]"
-                        async for b in artificial_stream(marker, pause=0.04):
-                            yield b
-                        yield b"\n\n"
+                        async for s in artificial_stream(marker, pause=0.04):
+                            yield self._emit_text_ndjson(s)
+                        yield self._emit_text_ndjson("\n\n")
 
                     ########################## TOOL REQUEST
                     case ("subagent", InnerStreamEvent.TOOL_REQUEST) | ("nested_agent", InnerStreamEvent.TOOL_REQUEST):
@@ -144,17 +144,17 @@ class RunnableAgent:
                             + (f" (id={toolcall_id})" if toolcall_id else "")
                             + "....]"
                         )
-                        async for b in artificial_stream(marker, pause=0.04):
-                            yield b
-                        yield b"\n\n"
+                        async for s in artificial_stream(marker, pause=0.04):
+                            yield self._emit_text_ndjson(s)
+                        yield self._emit_text_ndjson("\n\n")
 
                     ########################## TOOL RESULT
                     case ("subagent", InnerStreamEvent.TOOL_RESULT) | ("nested_agent", InnerStreamEvent.TOOL_RESULT):
                         tool_name = chunk.tool_name or "unknown_tool"
                         marker = f"[SUBAGENT TOOLCALL DONE: {chunk.subagent}::{tool_name}....]"
-                        async for b in artificial_stream(marker, pause=0.04):
-                            yield b
-                        yield b"\n\n"
+                        async for s in artificial_stream(marker, pause=0.04):
+                            yield self._emit_text_ndjson(s)
+                        yield self._emit_text_ndjson("\n\n")
 
                     ########################## FINAL ANSWER
                     case ("subagent", InnerStreamEvent.FINAL) | ("nested_agent", InnerStreamEvent.FINAL):
@@ -162,33 +162,31 @@ class RunnableAgent:
                         text = chunk.final_answer
                         if isinstance(text, str) and text:
                             header = f"[SUBAGENT FINAL: {chunk.subagent}]"
-                            async for b in artificial_stream(header, pause=0.02):
-                                yield b
-                            yield b"\n"
-                            async for b in artificial_stream(text, pause=0.02):
-                                yield b
-                            yield b"\n\n"
+                            async for s in artificial_stream(header, pause=0.02):
+                                yield self._emit_text_ndjson(s)
+                            yield self._emit_text_ndjson("\n\n")
+                            async for s in artificial_stream(text, pause=0.02):
+                                yield self._emit_text_ndjson(s)
+                            yield self._emit_text_ndjson("\n\n")
                         else:
-                            yield f"[SUBAGENT FINAL: {chunk.subagent} (no text)]".encode("utf-8")
-                            yield b"\n\n"
+                            yield self._emit_text_ndjson(f"[SUBAGENT FINAL: {chunk.subagent} (no text)]")
+                            yield self._emit_text_ndjson("\n\n")
 
                     ########################## ABORTION
                     case ("subagent", InnerStreamEvent.ABORTED) | ("nested_agent", InnerStreamEvent.ABORTED):
                         reason = chunk.abortion_reason or "aborted!"
-                        yield f"[INNER AGENT ABORTED: {reason}]".encode("utf-8")
+                        yield self._emit_text_ndjson(f"[INNER AGENT ABORTED: {reason}]")
                         return
 
                     ########################## CUSTOM
                     case ("subagent", InnerStreamEvent.CUSTOM) | ("nested_agent", InnerStreamEvent.CUSTOM):
-                        yield (
-                            f"-------------- [NESTED SUBAGENT CUSTOM:{chunk.subagent}]: {chunk.data}"
-                        ).encode("utf-8")
-                        yield b"\n\n"
+                        yield self._emit_text_ndjson(f"-------------- [NESTED SUBAGENT CUSTOM:{chunk.subagent}]: {chunk.data}")
+                        yield self._emit_text_ndjson("\n\n")
 
                     ########################## FALLBACK
                     case _:
-                        yield f"-------------- [SUBAGENT UNKNOWN EVENT:{chunk.subagent}]: {data}".encode("utf-8")
-                        yield b"\n\n"
+                        yield self._emit_text_ndjson(f"-------------- [SUBAGENT UNKNOWN EVENT:{chunk.subagent}]: {data}")
+                        yield self._emit_text_ndjson("\n\n")
 
                 continue  # important: do not fall into updates logic!
             
@@ -208,7 +206,7 @@ class RunnableAgent:
                         update.get("agent_output_abortion_reason")
                         or "validation rejected"
                     )
-                    yield f"[ABORTED: {reason}]".encode("utf-8")
+                    yield self._emit_text_ndjson(f"[ABORTED: {reason}]")
                     return
 
                 ########### CASE NEW MESSAGE
@@ -230,16 +228,16 @@ class RunnableAgent:
                             emitted_toolcall_ids.add(tc_id)
                             tool_name = tc.get("name", "unknown_tool")
                             marker = f"[+++ CALLING TOOL:{tool_name}....]"
-                            async for chunk in artificial_stream(marker, pause=0.04):
-                                yield chunk
-                            yield b"\n\n"
+                            async for s in artificial_stream(marker, pause=0.04):
+                                yield self._emit_text_ndjson(s)
+                            yield self._emit_text_ndjson("\n\n")
 
                     ###### CASE TOOLCALL MADE
                     elif isinstance(last, ToolMessage):
                         marker = f"[+++ TOOLCALL DONE: {last.name}....]"
-                        async for chunk in artificial_stream(marker, pause=0.04):
-                            yield chunk
-                        yield b"\n\n"
+                        async for s in artificial_stream(marker, pause=0.04):
+                            yield self._emit_text_ndjson(s)
+                        yield self._emit_text_ndjson("\n\n")
 
                 ########### CASE NOT FINAL ANSWER YET
                 validated: Optional[Any] = update.get("validated_agent_output")
@@ -260,8 +258,8 @@ class RunnableAgent:
 
                 if text:
                     emitted_final = True
-                    async for chunk in artificial_stream(text, pause=0.04):
-                        yield chunk
+                    async for s in artificial_stream(text, pause=0.04):
+                        yield self._emit_text_ndjson(s, type = "text_final")
                     return
 
     def _construct_thread(
@@ -281,7 +279,18 @@ class RunnableAgent:
                 case _:
                     raise ValueError(f"Unsupported role: {message.role}")
         return thread
-         
+
+    @staticmethod
+    def _emit_text_ndjson(text: str, type: str = "text_step") -> bytes:
+        """Helper to dump text into json typed chunk."""
+        match type:
+            case "text_step":
+                return (json.dumps({"type": "text_step", "data":text}, ensure_ascii=False) + "\n").encode("utf-8")
+            case "text_final":
+                return (json.dumps({"type": "text_final", "data":text}, ensure_ascii=False) + "\n").encode("utf-8")
+            case _:
+                raise ValueError("Wrong chunk type!")
+        
 class AgentFactory:
     """Provides a unified mechanism for constructing fully configured agents.
 

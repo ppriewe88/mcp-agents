@@ -21,7 +21,7 @@ stabiler Streaming-Semantik,
 und kontrollierbarer Agenten-Orchestrierung.
 
 1. Zentrale Konzepte & Domänenobjekte
-2.1 CompleteAgent
+   2.1 CompleteAgent
 
 Was es ist:
 Ein reines Konfigurationsobjekt (keine Runtime-Logik).
@@ -86,7 +86,7 @@ kein inneres Streaming, keine Tool-Hüllen
 bewusst einfach gehalten
 
 1. Factory-Ansatz
-3.1 AgentFactory
+   3.1 AgentFactory
 
 Zentrale Aufgabe:
 Erzeugt aus einem CompleteAgent einen lauffähigen ConfiguredAgent.
@@ -119,7 +119,7 @@ Ergebnis:
 Ein vollständig konfigurierter, isolierter Agent mit definierter Runtime-API.
 
 1. Streaming-Architektur (aktueller Stand)
-4.1 Outer Stream (ConfiguredAgent.outer_astream)
+   4.1 Outer Stream (ConfiguredAgent.outer_astream)
 
 Zweck:
 Streaming zum Frontend.
@@ -127,8 +127,8 @@ Streaming zum Frontend.
 Verwendet:
 
 self.agent.astream(
-    extended_state,
-    stream_mode=["messages", "updates", "custom"]
+extended_state,
+stream_mode=["messages", "updates", "custom"]
 )
 
 Verarbeitet:
@@ -176,7 +176,7 @@ final_answer
 emittiert diese Events via:
 
 writer = get_stream_writer()
-writer({...})  # custom event
+writer({...}) # custom event
 
 Wichtiges Architekturprinzip:
 
@@ -187,8 +187,8 @@ Inneres Streaming lebt exklusiv in der Tool-Hülle
 get_stream_writer() funktioniert, da Tool im Runnable-Kontext läuft
 
 1. API-Integration (FastAPI)
-5.1 Aktueller Endpunkt
-@app.post("/stream-test")
+   5.1 Aktueller Endpunkt
+   @app.post("/stream-test")
 
 Modi:
 
@@ -217,7 +217,7 @@ geeignet für erste Frontend-Tests
 noch untypisierte Events
 
 1. Aktueller Gesamtstatus
-Was funktioniert:
+   Was funktioniert:
 
 Factory & Agent-Zusammenbau
 
@@ -240,7 +240,7 @@ NDJSON / SSE-Format
 Konsolidierte Event-Semantik (outer + inner)
 
 1. Nächste geplante Schritte (fixiert)
-Schritt 1 – Custom Events sichtbar machen
+   Schritt 1 – Custom Events sichtbar machen
 
 custom-Events im outer_astream nicht nur printen
 
@@ -297,3 +297,34 @@ Inner Stream = reduziert, gefiltert, weitergereicht
 Wenn du mir künftig einfach sagst:
 
 „Wir sind bei dem Agent-as-Tool Streaming-Projekt, Factory + ConfiguredAgent, inner stream über Tool-Hülle, outer_astream streamt ans Frontend – wir wollen jetzt die custom Events typisieren und visualisieren“
+
+########## ERGÄNZUJNG zum Thema Streaming:
+Der Endpoint /stream-test liefert eine StreamingResponse mit media_type="application/x-ndjson" und streamt die Agent-Ausgabe aus outer_astream(...).
+
+outer_astream normalisiert alle Ausgaben in NDJSON-Chunks (ein JSON-Objekt pro Zeile) und nutzt dafür \_emit_text_ndjson(text, type=...), die aktuell text_step und text_final erzeugt.
+
+In outer_astream werden die unterschiedlichen internen Stream-Quellen (Custom-Events von Subagenten/Nested Agents sowie Outer-Agent-Updates inkl. Toolcall-Marker und Final Output) auf diese Chunk-Typen gemappt:
+
+“Arbeitsschritte/Marker” → text_step
+
+“Finale Antwort” (validated output) → text_final
+
+artificial_stream liefert Text-Fragmente, die im outer_astream konsequent über \_emit_text_ndjson(...) gerahmt werden; dadurch ist die Stream-Ausgabe formal stabil (NDJSON) und später leicht erweiterbar.
+
+Nächster Ausbaupfad: Einführung eines expliziten Datenmodells (Enum/Union via Pydantic) für Chunk-Typen und Payloads, sodass Tool-Ergebnisse als strukturierte Datenpakete (JSON) vor dem text_final gestreamt werden können, ohne das Streaming-Protokoll zu ändern.
+
+To-dos
+
+\_emit_text_ndjson zu einer generischen \_emit_ndjson(type, data) erweitern und neue Typen (tool_result, tool_request, error, etc.) aufnehmen.
+
+Pydantic-Modelle/Enums für Chunk-Typen und Payloads definieren (z. B. StreamChunkBase + Union), um Typsicherheit und Validierung zu erhalten.
+
+In outer_astream die heutigen Marker (Toolcalls, Subagent-Events) von reinen Texten auf echte strukturierte Payloads (JSON) umstellen.
+
+Tool-Ergebnisse (z. B. Tabellen) als strukturierte Datenpakete (Rows/Columns) in tool_result-Chunks ausgeben.
+
+Optionale Sequenznummer (seq) oder Timestamp in die Chunks aufnehmen, falls später explizite Ordnung oder Replays benötigt werden.
+
+Einheitliche Fehler-/Abbruch-Chunks (aborted, error) definieren und überall konsistent verwenden.
+
+Tests für NDJSON-Streaming (Chunk-Grenzen, Typen, Reihenfolge) hinzufügen.
