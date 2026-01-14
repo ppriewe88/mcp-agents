@@ -299,16 +299,10 @@ class AgentFactory:
                 else behaviour_config.system_prompt
             )
 
-            effective_direct_prompt = (
-                behaviour_config.direct_answer_prompt
-                if behaviour_config.direct_answer_prompt is not None
-                else behaviour_config.system_prompt
-            )
-
             loopcontrol_middleware.extend(
                 override_final_agentprompt_async(
                     toolbased_answer_prompt=effective_toolbased_prompt,
-                    direct_answer_prompt=effective_direct_prompt,
+                    direct_answer_prompt=behaviour_config.direct_answer_prompt,
                 )
             )
 

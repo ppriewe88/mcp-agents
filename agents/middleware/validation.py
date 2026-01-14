@@ -39,10 +39,7 @@ class AgentResponseValidator:
     DEFAULT_SYSTEM_PROMPT = """Du beurteilst die Antwort eines Toolcalling-Agenten.
 
         <Anweisungen>:
-        Bestimme, ob die Antwort 'usable' ist.
-
-        Eine Antwort ist usable, wenn:
-        - wenn sie klar ausdrückt, dass für einen Toolaufruf Informationen fehlen, und angibt, welche das sind.
+        Bestimme, ob die Antwort nicht 'usable' ist.
 
         Eine Antwort ist nicht usable, wenn:
         - wenn sie nur sagt, dass kein Tool aufgerufen werden konnte oder gar keine Werkzeuge benutzt wurden.
