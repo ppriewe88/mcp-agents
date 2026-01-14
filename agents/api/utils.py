@@ -1,6 +1,6 @@
 from typing import List
 
-from agents.containers.agents_as_tools import AgentAsToolContainer
+from agents.containers.subagents import AgentAsToolContainer
 from agents.factory.factory import AgentFactory, RunnableAgent
 from agents.models.agents import AgentBehaviourConfig, CompleteAgentConfig
 from agents.models.api import StreamAgentRequest
@@ -51,9 +51,9 @@ def use_test_agent() -> RunnableAgent:
                 description="""Inner agent. Useful for arithmetic operations like adding numbers.""",
                 system_prompt="Use your tools to answer the user query",
                 only_one_model_call=False,
-                directanswer_validation_sysprompt="direct answer is always usable",
-                directanswer_allowed = False,
-                toolbased_answer_prompt="Summarize your toolcall results in a nice and fancy catch phrase!"
+                toolbased_answer_prompt="Summarize your toolcall results in a nice and fancy catch phrase!",
+                direct_answer_prompt="""If no tools are suitable to help answering the user query:
+                - Politely tell the user, that you cannot answer this questions based on your capabilities (tools)."""
             ),
             tool_schemas=[schema_add, schema_birthday],
         )
@@ -65,7 +65,7 @@ def use_test_agent() -> RunnableAgent:
         complete_config=inner_agent_configuration
     )
 
-    agents_as_tools = AgentAsToolContainer(
+    subagents = AgentAsToolContainer(
         agents = [inner_agent]
     )
 
@@ -80,13 +80,13 @@ def use_test_agent() -> RunnableAgent:
             - you can use the other tools as well.
             - If no tool mathes, let the user know. Also let him know, if you need inputs that are not given.""",
             only_one_model_call=False,
-            directanswer_validation_sysprompt="direct answer is always usable",
-            directanswer_allowed = True,
             toolbased_answer_prompt="""Summarize your tooling responses. 
-            If you have received infos from a sub agent, cite him and make clear what he  told you!"""
+            If you have received infos from a sub agent, cite him and make clear what he  told you!""",
+            direct_answer_prompt="""If no tools are suitable to help answering the user query:
+            - Politely tell the user, that you cannot answer this questions based on your capabilities (tools).""",
         ),
         tool_schemas=[schema_shopping_list],
-        agents_as_tools = list(agents_as_tools.tools_for_agent.values())
+        subagents = list(subagents.subagents.values())
     )
 
     outer_agent: RunnableAgent = factory._charge_runnable_agent(

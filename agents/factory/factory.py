@@ -9,6 +9,7 @@ from langchain.messages import (
     AnyMessage,
     HumanMessage,
     ToolMessage,
+    SystemMessage
 )
 from langchain_core.tools.structured import StructuredTool
 from langgraph.graph.state import CompiledStateGraph, StateT
@@ -30,6 +31,8 @@ from agents.models.agents import (
     CompleteAgentConfig,
     PromptMarkers,
 )
+from agents.models.stream import InnerStreamChunk, InnerStreamEvent
+from agents.models.api import ChatMessage, ChatRole
 from agents.models.extended_state import CustomStateShared
 from agents.models.tools import ToolSchema
 
@@ -58,12 +61,12 @@ class RunnableAgent:
     def __init__(
         self,
         langchain_agent: CompiledStateGraph,
-        config: AgentBehaviourConfig,
+        behaviour_config: AgentBehaviourConfig,
         name: Optional[str] = None,
         description: str = "",
     ):
         self.agent: CompiledStateGraph[StateT] = langchain_agent  # type: ignore[valid-type]
-        self.config: AgentBehaviourConfig = config
+        self.behaviour_config: AgentBehaviourConfig = behaviour_config
         self.name: str = name or ""
         self.description = description
         self.initial_state = CustomStateShared(
@@ -82,21 +85,24 @@ class RunnableAgent:
             validated_agent_output=None,
         )
 
-    async def run(self, query: str) -> str | dict[str, Any]:
+    async def run(self, messages: List[ChatMessage]) -> str | dict[str, Any]:
         """Executes the configured agent using a message."""
         extended_state = self.initial_state
-        extended_state["messages"] = [HumanMessage(query)]
-        extended_state["query"] = query
+        extended_state["messages"] = self._construct_thread(messages)
+        extended_state["query"] = messages[-1].content
 
         result = await self.agent.ainvoke(extended_state)
 
         return result
 
-    async def outer_astream(self, query: str) -> AsyncGenerator[bytes, None]:
+    async def outer_astream(
+            self, 
+            messages: List[ChatMessage]
+            ) -> AsyncGenerator[bytes, None]:
         """Executes the configured agent using a message."""
         extended_state = self.initial_state
-        extended_state["messages"] = [HumanMessage(query)]
-        extended_state["query"] = query
+        extended_state["messages"] = self._construct_thread(messages)
+        extended_state["query"] = messages[-1].content
 
         emitted_toolcall_ids: set[str] = set()
         emitted_final = False
@@ -105,38 +111,112 @@ class RunnableAgent:
             extended_state,
             stream_mode=["messages", "updates", "custom"],
         ):
+            ########################################### CUSTOM EVENTS FROM SUBAGENTS (SUBTHREAD)
             if stream_mode == "custom":
-                # data is dict sent by inner agent's stream writer
-                print("[DEBUG][CUSTOM EVENT]:", data)
+                # check chunk type
+                chunk: Optional[InnerStreamChunk] = None
+                try:
+                    chunk = InnerStreamChunk.model_validate(data)
+                except Exception:
+                    chunk = None
+                
+                if chunk is None: 
+                    yield f"-------------- [CUSTOM STREAM UNKNOWN EVENT]: {data}".encode("utf-8")
+                    yield b"\n\n"
+                    continue
+                
+                ############## handle subagent/nested_agent chunks explicitly; others are debugged above
+                match (chunk.type, chunk.event):
 
-                yield f"-------------- [INNER CUSTOM]: {data}".encode("utf-8")
-                yield b"\n\n"
+                    ########################## START 
+                    case ("subagent", InnerStreamEvent.START) | ("nested_agent", InnerStreamEvent.START):
+                        marker = f"[SUBAGENT START: {chunk.subagent}....]"
+                        async for b in artificial_stream(marker, pause=0.04):
+                            yield b
+                        yield b"\n\n"
 
-                continue  # ganz wichtig: nicht in updates-Logik fallen
+                    ########################## TOOL REQUEST
+                    case ("subagent", InnerStreamEvent.TOOL_REQUEST) | ("nested_agent", InnerStreamEvent.TOOL_REQUEST):
+                        tool_name = chunk.tool_name or "unknown_tool"
+                        toolcall_id = chunk.toolcall_id
+                        marker = (
+                            f"[SUBAGENT CALLING TOOL: {chunk.subagent}::{tool_name}"
+                            + (f" (id={toolcall_id})" if toolcall_id else "")
+                            + "....]"
+                        )
+                        async for b in artificial_stream(marker, pause=0.04):
+                            yield b
+                        yield b"\n\n"
 
+                    ########################## TOOL RESULT
+                    case ("subagent", InnerStreamEvent.TOOL_RESULT) | ("nested_agent", InnerStreamEvent.TOOL_RESULT):
+                        tool_name = chunk.tool_name or "unknown_tool"
+                        marker = f"[SUBAGENT TOOLCALL DONE: {chunk.subagent}::{tool_name}....]"
+                        async for b in artificial_stream(marker, pause=0.04):
+                            yield b
+                        yield b"\n\n"
+
+                    ########################## FINAL ANSWER
+                    case ("subagent", InnerStreamEvent.FINAL) | ("nested_agent", InnerStreamEvent.FINAL):
+                        # IMPORTANT: do NOT return here (outer final answer comes from outer validated output)
+                        text = chunk.final_answer
+                        if isinstance(text, str) and text:
+                            header = f"[SUBAGENT FINAL: {chunk.subagent}]"
+                            async for b in artificial_stream(header, pause=0.02):
+                                yield b
+                            yield b"\n"
+                            async for b in artificial_stream(text, pause=0.02):
+                                yield b
+                            yield b"\n\n"
+                        else:
+                            yield f"[SUBAGENT FINAL: {chunk.subagent} (no text)]".encode("utf-8")
+                            yield b"\n\n"
+
+                    ########################## ABORTION
+                    case ("subagent", InnerStreamEvent.ABORTED) | ("nested_agent", InnerStreamEvent.ABORTED):
+                        reason = chunk.abortion_reason or "aborted!"
+                        yield f"[INNER AGENT ABORTED: {reason}]".encode("utf-8")
+                        return
+
+                    ########################## CUSTOM
+                    case ("subagent", InnerStreamEvent.CUSTOM) | ("nested_agent", InnerStreamEvent.CUSTOM):
+                        yield (
+                            f"-------------- [NESTED SUBAGENT CUSTOM:{chunk.subagent}]: {chunk.data}"
+                        ).encode("utf-8")
+                        yield b"\n\n"
+
+                    ########################## FALLBACK
+                    case _:
+                        yield f"-------------- [SUBAGENT UNKNOWN EVENT:{chunk.subagent}]: {data}".encode("utf-8")
+                        yield b"\n\n"
+
+                continue  # important: do not fall into updates logic!
+            
+            ########################################### OUTER AGENT MESSAGE CHUNKS (SUPPRESS)
             if stream_mode == "messages":
                 continue
 
+            ########################################### OUTER AGENT MESSAGE UPDATES (HIGHEST THREAD)
             assert stream_mode == "updates"
             for _source, update in data.items():  # type: ignore[union-attr]
                 if not isinstance(update, dict):
                     continue
 
-                # CASE VALIDATOR ABORT
+                ########### CASE VALIDATOR ABORT
                 if update.get("agent_output_aborted") is True:
                     reason = (
                         update.get("agent_output_abortion_reason")
                         or "validation rejected"
                     )
-                    yield f"[ABORTED:{reason}]".encode("utf-8")
+                    yield f"[ABORTED: {reason}]".encode("utf-8")
                     return
 
-                # CASE NEW MESSAGE
+                ########### CASE NEW MESSAGE
                 msgs = update.get("messages")
                 if msgs:
                     last: AnyMessage = msgs[-1]
 
-                    # CASE TOOLCALL REQUESTED
+                    ###### CASE TOOLCALL REQUESTED
                     if isinstance(last, AIMessage) and getattr(
                         last, "tool_calls", None
                     ):
@@ -154,19 +234,19 @@ class RunnableAgent:
                                 yield chunk
                             yield b"\n\n"
 
-                    # CASE TOOLCALL MADE
+                    ###### CASE TOOLCALL MADE
                     elif isinstance(last, ToolMessage):
                         marker = f"[+++ TOOLCALL DONE: {last.name}....]"
                         async for chunk in artificial_stream(marker, pause=0.04):
                             yield chunk
                         yield b"\n\n"
 
-                # CASE NOT FINAL ANSWER YET
+                ########### CASE NOT FINAL ANSWER YET
                 validated: Optional[Any] = update.get("validated_agent_output")
                 if validated is None or emitted_final:
                     continue
 
-                # CASE FINAL ANSWER
+                ########### CASE FINAL ANSWER
                 text: Optional[str] = None
                 if isinstance(validated, AIMessage):
                     if isinstance(validated.content, str):
@@ -184,6 +264,24 @@ class RunnableAgent:
                         yield chunk
                     return
 
+    def _construct_thread(
+            self, 
+            messages: List[ChatMessage]
+            ) -> List[AIMessage | SystemMessage | HumanMessage]:
+        """Construct langchain message list from frontend input."""
+        thread: list[SystemMessage | HumanMessage | AIMessage] = [
+            SystemMessage(self.behaviour_config.system_prompt)
+        ]
+        for message in messages:
+            match message.role:
+                case ChatRole.user:
+                    thread.append(HumanMessage(message.content))
+                case ChatRole.ai:
+                    thread.append(AIMessage(message.content))
+                case _:
+                    raise ValueError(f"Unsupported role: {message.role}")
+        return thread
+         
 class AgentFactory:
     """Provides a unified mechanism for constructing fully configured agents.
 
@@ -234,7 +332,7 @@ class AgentFactory:
         ################################################################### charge tools (inject)
         tools: List[StructuredTool] = self._charge_tools(
             tool_schemas=complete_config.tool_schemas,
-            agents_as_tools=complete_config.agents_as_tools,
+            subagents=complete_config.subagents,
         )
 
         ################################################################### construct agent (build)
@@ -249,13 +347,13 @@ class AgentFactory:
         return agent
 
     def _charge_tools(
-        self, tool_schemas: List[ToolSchema], agents_as_tools: List[Any]
+        self, tool_schemas: List[ToolSchema], subagents: List[Any]
     ) -> List[StructuredTool]:
         """Creates tools with container class methodology. Injects mandatory and optional data."""
         ############################################################## build tool container
         tool_container = MCPToolContainer(schemas=tool_schemas)
         mcp_tools: List[StructuredTool] = list(tool_container.tools_agent.values())
-        all_tools = mcp_tools + agents_as_tools
+        all_tools = mcp_tools + subagents
         return all_tools
 
     def _create_runnable_agent(
@@ -309,8 +407,7 @@ class AgentFactory:
         #################### validation middleware
         validation_middleware: list[Any] = [
             configured_validator_async(
-                directanswer_validation_prompt=behaviour_config.directanswer_validation_sysprompt,
-                allow_direct_answers=behaviour_config.directanswer_allowed,
+                directanswer_validation_prompt=behaviour_config.directanswer_validation_sysprompt or None,
             )
         ]
 
@@ -332,7 +429,7 @@ class AgentFactory:
 
         return RunnableAgent(
             langchain_agent=agent,
-            config=behaviour_config,
+            behaviour_config=behaviour_config,
             description=description,
             name=name,
         )

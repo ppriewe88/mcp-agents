@@ -20,7 +20,6 @@ numberone_entry = CompleteAgentConfig(
         system_prompt=AGENTPROMPT_INITIAL,
         only_one_model_call=True,
         directanswer_validation_sysprompt=AGENTPROMPT_INITIAL,
-        directanswer_allowed=False,
     ),
     tool_schemas=[schema_add],
 )

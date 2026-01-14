@@ -295,8 +295,7 @@ def override_final_agentprompt_async(
 
 ############################################################### validate answer (after agent)
 def configured_validator_async(
-    directanswer_validation_prompt: str = SYSTEM_PROMPT_VALIDATOR_USABILITY,
-    allow_direct_answers: bool = True,
+    directanswer_validation_prompt: Optional[str] = None,
 ):
     """Creates async post-agent middleware that validates direct agent (without toolcalls) output for usability.
 
@@ -305,7 +304,6 @@ def configured_validator_async(
 
     Args:
         system_prompt_usability (str): System prompt used for the usability validation model call.
-        allow_direct_answers (bool): Whether to accept direct answers as usable output.
 
     Returns:
         Callable: An async middleware function that stores the validated agent output in the state.
@@ -336,23 +334,25 @@ def configured_validator_async(
             if isinstance(message, AIMessage)
             or isinstance(message, HumanMessage)
             or isinstance(message, ToolMessage)
+            or isinstance(message, SystemMessage)
         ]
         assert len(messages_raw) == len(available_messages)
 
         ###################### validator instance
-        validator = AgentResponseValidator(system_prompt_usability=directanswer_validation_prompt)
+        validator = AgentResponseValidator(
+            system_prompt_usability=directanswer_validation_prompt
+            )
 
         ###################### validate
         agent_name = state.get("agent_name")
         assert agent_name is not None
-        logger.info(f"[AGENT {agent_name}] Validate agent response")
+        logger.info(f"[AGENT {agent_name}] Run validation module")
         agent_output: ValidatedAgentResponse = await validator.validate_agent_response(
             available_messages,
-            allow_direct_answers,
         )
 
         assert agent_output.type is not None
-        logger.info(f"[AGENT {agent_name}] Agent response has been validated.")
+        logger.info(f"[AGENT {agent_name}] Validation module end")
         return {
             "agent_output_aborted": not agent_output.valid,
             "agent_output_abortion_reason": (

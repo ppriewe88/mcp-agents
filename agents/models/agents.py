@@ -22,9 +22,8 @@ class AgentBehaviourConfig(BaseModel):
     name: str
     description: str = ""
     system_prompt: str
-    directanswer_validation_sysprompt: str
-    directanswer_allowed: bool = True
     direct_answer_prompt: Optional[str] = None
+    directanswer_validation_sysprompt: Optional[str] = None
     toolbased_answer_prompt: Optional[str] = None
     max_toolcalls: Optional[int] = None
     only_one_model_call: bool = False
@@ -36,14 +35,12 @@ class CompleteAgentConfig(BaseModel):
     description: str
     behaviour_config: AgentBehaviourConfig
     tool_schemas: list[ToolSchema]
-    agents_as_tools: List[Any] = []
+    subagents: List[Any] = []
 
 class AbortionCodes(str, Enum):
     """Enum of agent response abortion reasons."""
 
-    NO_TOOLMATCH = "NO_MATCHING_TOOL_FOUND"
     TOOL_ERROR = "MCP_TOOL_ERROR"
-    DIRECT_ANSWERS_FORBIDDEN = "NO_DIRECT_ANSWERS_ALLOWED"
     DIRECT_ANSWER_UNUSABLE = "DIRECT_AGENT_RESPONSE_UNUSABLE"
     HALLUCINATION = "HALLUCINATION_DETECTED"
     UNKNOWN = "UNKNOWN_ABORTION"
@@ -71,5 +68,4 @@ class PromptMarkers(str, Enum):
     TOOLBASED_ANSWER = "toolbased_answer_prompt"
 
 class MiscMarkers(str, Enum):
-    NO_EXTRACTIONS_FOUND = "no extractions found in text"
     POSTPROCESSING_ERRORMARKER = "TOOL_ERROR"

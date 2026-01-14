@@ -25,7 +25,7 @@ async def test_final_integration() -> None:
     agent1: RunnableAgent = factory._charge_runnable_agent(
         name="Test", complete_config=numberone_entry
     )  # type: ignore[annotation-unchecked]
-    result = await agent1.run(query="addiere 2 und 5")
+    result = await agent1.run(messages="addiere 2 und 5")
     print(result)  # type: ignore[index]
 
     print("#####################################")
@@ -35,7 +35,7 @@ async def test_final_integration() -> None:
     agent2: RunnableAgent = factory._charge_runnable_agent(
         name="Test", complete_config=numbertwo_entry
     )  # type: ignore[annotation-unchecked]
-    result = await agent2.run(query="Wann ist der weihnachtsmann geboren?")
+    result = await agent2.run(messages="Wann ist der weihnachtsmann geboren?")
     print(result)  # type: ignore[index]
 
     print("#####################################")
