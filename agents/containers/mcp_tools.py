@@ -88,15 +88,9 @@ class MCPToolContainer:
         return wrapper
 
     def _build_signature(self, schema: ToolSchema) -> inspect.Signature:
-        """Construct the Python signature for the LLM-facing tool function.
-
-        Only arguments that are not drop_and_inject (i.e., visible to the LLM)
-        appear in the signature. VSNR remains the only forced injection and does
-        not appear here.
-        """
+        """Construct the Python signature for the LLM-facing tool function."""
         parameters = [inspect.Parameter("self", inspect.Parameter.POSITIONAL_OR_KEYWORD)]
 
-        # get LLM-visible args = all except drop_and_inject
         llm_args = schema.get_args()
 
         for arg in llm_args:
@@ -117,19 +111,16 @@ class MCPToolContainer:
     ) -> Dict[str, str]:
         """Construct the full dictionary of server-side arguments required for the MCP call.
 
-        This method maps LLM-provided arguments to their server-side equivalents and injects
-        all required drop_and_inject fields using available InjectibleArg instances.
-        It guarantees that every server argument marked for injection receives a valid value.
+        This method maps LLM-provided arguments to their server-side equivalents.
 
         Args:
             schema (ToolSchema): The schema defining both LLM-facing and server-facing argument metadata.
-            llm_args (List[ToolArg]): Active non-dropped argument definitions provided by the LLM.
             llm_kwargs (Dict[str, str]): Actual runtime values passed from the LLM during invocation.
 
         Returns:
             Dict[str, str]: A dictionary mapping server-side argument names to their final values.
         """
-        # get active args (i.e. args that are provided by llm, i.e. that are not injected)
+        # get llm args
         llm_args: List[ToolArg] = schema.get_args()
 
         # build dict that maps llm args on server args -> empty vessel first
@@ -178,7 +169,7 @@ class MCPToolContainer:
 
         Args:
             schema (ToolSchema): The schema specifying required server-side argument names.
-            constructed_server_args (Dict[str, Any]): The final argument mapping produced after injection.
+            constructed_server_args (Dict[str, Any]): The final argument mapping produced.
 
         Returns:
             None: Raises ValueError when arguments are missing or unexpected fields are present.
@@ -215,8 +206,7 @@ class MCPToolContainer:
     ) -> Callable[..., Awaitable[str | CallToolResult]]:
         """Create the asynchronous MCP execution function for a specific tool schema.
 
-        This factory method generates the complete dynamic caller, including signature mapping,
-        argument injection, schema validation, MCP request handling, and postprocessing.
+        This factory method generates the complete dynamic caller, including signature mapping, schema validation, MCP request handling, and postprocessing.
         The returned async function becomes the core logic used by agents and sync wrappers.
 
         Args:
@@ -225,7 +215,7 @@ class MCPToolContainer:
         Returns:
             Callable[..., Awaitable[str]]: An async function implementing the full MCP tool call.
         """
-        # use active args (i.e. args that are provided by llm, i.e. that are not injected)
+        # use active args
         llm_args = schema.get_args()
 
         ############################### create signature
@@ -237,7 +227,6 @@ class MCPToolContainer:
             """Core mcp caller with signature built from ToolSchema.
 
             During construction, signature is built from llm-facing tool argument names.
-            Drop_and_inject- inputs are dropped and not included in signature.
 
             args and kwargs: To be provided by llm!
 
@@ -254,7 +243,7 @@ class MCPToolContainer:
                 f"llm args={kwargs}"
             )
 
-            ###################### construct server-args dict with injections
+            ###################### construct server-args dict
             constructed_server_args = self._construct_complete_server_args(
                 schema=schema,
                 llm_kwargs=kwargs,
