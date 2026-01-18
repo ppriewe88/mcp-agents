@@ -75,7 +75,7 @@ class AgentAsToolContainer:
                     type="subagent",
                     event = event,
                     subagent= subagent_name,
-                    user_query=user_query
+                    query=user_query
                 ).model_dump(mode="json")
                 )
 
@@ -149,7 +149,8 @@ class AgentAsToolContainer:
                                     type="subagent",
                                     event = event,
                                     subagent= subagent_name,
-                                    tool_name=last.name
+                                    tool_name=last.name,
+                                    data = last.content
                                 ).model_dump(mode="json")
                             )
 
@@ -176,7 +177,8 @@ class AgentAsToolContainer:
                     
                     if validated_output is None:
                         continue
-
+                    
+                    ## final answer
                     assert isinstance(validated_output, str) and validated_output
                     event = InnerStreamEvent.FINAL.value
                     writer(

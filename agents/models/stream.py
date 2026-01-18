@@ -22,8 +22,8 @@ class InnerStreamChunk(BaseModel):
     event: InnerStreamEvent
     subagent: str
 
-    query: Optional[str] = None
     data: Optional[Any] = None
+    query: Optional[str] = None
     toolcall_id: Optional[str] = None
     tool_name: Optional[str] = None
     aborted: Optional[bool] = None

@@ -5,7 +5,7 @@ from agents.factory.factory import AgentFactory, RunnableAgent
 from agents.models.agents import AgentBehaviourConfig, CompleteAgentConfig
 from agents.models.api import StreamAgentRequest
 from agents.models.tools import ToolSchema
-from tests.schemas import schema_add, schema_birthday, schema_shopping_list
+from tests.schemas import schema_add, schema_birthday, schema_shopping_list, schema_structured_pydantic, schema_structured_dict
 
 
 def assemble_agent(payload: StreamAgentRequest) -> RunnableAgent:
@@ -69,6 +69,7 @@ def use_test_agent() -> RunnableAgent:
         agents = [inner_agent]
     )
 
+    ###################################################### setup outer agent (CONFIGURATION! FROM THIS, ACTUAL AGENT OBJECT WILL BE BUILT!)
     outer_agent_configuration = CompleteAgentConfig(
         description="""Outer agent.
         Can call inner agent.""",
@@ -85,7 +86,7 @@ def use_test_agent() -> RunnableAgent:
             direct_answer_prompt="""If no tools are suitable to help answering the user query:
             - Politely tell the user, that you cannot answer this questions based on your capabilities (tools).""",
         ),
-        tool_schemas=[schema_shopping_list],
+        tool_schemas=[schema_shopping_list, schema_structured_pydantic, schema_structured_dict],
         subagents = list(subagents.subagents.values())
     )
 

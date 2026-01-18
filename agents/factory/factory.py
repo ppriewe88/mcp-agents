@@ -131,8 +131,9 @@ class RunnableAgent:
                     ########################## START 
                     case ("subagent", InnerStreamEvent.START) | ("nested_agent", InnerStreamEvent.START):
                         marker = f"[SUBAGENT START: {chunk.subagent}....]"
-                        async for s in artificial_stream(marker, pause=0.04):
-                            yield self._emit_text_ndjson(s)
+                        # async for s in artificial_stream(marker, pause=0.04):
+                        #     yield self._emit_text_ndjson(s)
+                        yield self._emit_text_ndjson(marker)
                         yield self._emit_text_ndjson("\n\n")
 
                     ########################## TOOL REQUEST
@@ -144,16 +145,19 @@ class RunnableAgent:
                             + (f" (id={toolcall_id})" if toolcall_id else "")
                             + "....]"
                         )
-                        async for s in artificial_stream(marker, pause=0.04):
-                            yield self._emit_text_ndjson(s)
+                        # async for s in artificial_stream(marker, pause=0.04):
+                        #     yield self._emit_text_ndjson(s)
+                        yield self._emit_text_ndjson(marker)
                         yield self._emit_text_ndjson("\n\n")
 
                     ########################## TOOL RESULT
                     case ("subagent", InnerStreamEvent.TOOL_RESULT) | ("nested_agent", InnerStreamEvent.TOOL_RESULT):
                         tool_name = chunk.tool_name or "unknown_tool"
-                        marker = f"[SUBAGENT TOOLCALL DONE: {chunk.subagent}::{tool_name}....]"
-                        async for s in artificial_stream(marker, pause=0.04):
-                            yield self._emit_text_ndjson(s)
+                        data = chunk.data
+                        marker = f"[SUBAGENT TOOLCALL DONE: {chunk.subagent}::{tool_name}. DATA: {data}]"
+                        # async for s in artificial_stream(marker, pause=0.04):
+                        #     yield self._emit_text_ndjson(s)
+                        yield self._emit_text_ndjson(marker)
                         yield self._emit_text_ndjson("\n\n")
 
                     ########################## FINAL ANSWER
@@ -228,15 +232,17 @@ class RunnableAgent:
                             emitted_toolcall_ids.add(tc_id)
                             tool_name = tc.get("name", "unknown_tool")
                             marker = f"[+++ CALLING TOOL:{tool_name}....]"
-                            async for s in artificial_stream(marker, pause=0.04):
-                                yield self._emit_text_ndjson(s)
+                            # async for s in artificial_stream(marker, pause=0.04):
+                            #     yield self._emit_text_ndjson(s)
+                            yield self._emit_text_ndjson(marker)
                             yield self._emit_text_ndjson("\n\n")
 
                     ###### CASE TOOLCALL MADE
                     elif isinstance(last, ToolMessage):
                         marker = f"[+++ TOOLCALL DONE: {last.name}....]"
-                        async for s in artificial_stream(marker, pause=0.04):
-                            yield self._emit_text_ndjson(s)
+                        # async for s in artificial_stream(marker, pause=0.04):
+                            #     yield self._emit_text_ndjson(s)
+                        yield self._emit_text_ndjson(marker)
                         yield self._emit_text_ndjson("\n\n")
 
                 ########### CASE NOT FINAL ANSWER YET
