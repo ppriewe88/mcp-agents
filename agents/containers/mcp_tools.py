@@ -272,13 +272,16 @@ class MCPToolContainer:
             logger.info(f"[TOOL RESULT] {schema.name_for_llm} received raw MCP response")
             assert isinstance(tool_result.content[0], TextContent)
 
+            ###################### abort errors
             if tool_result.isError:
-                logger.error(
-                    f"[TOOL ERROR] {schema.name_for_llm} MCP toolcall resulted in error: "
-                    f"{tool_result.content[0].text}"
-                )
+                logger.error(f"[TOOL ERROR] {schema.name_for_llm} MCP toolcall resulted in error.")
                 return MiscMarkers.POSTPROCESSING_ERRORMARKER.value
 
+            ###################### return structured content
+            if tool_result.structuredContent is not None:
+                return tool_result.structuredContent
+
+            ###################### return regular content
             return tool_result.content[0].text
 
         ############################### set documentation and signature
@@ -301,47 +304,3 @@ class MCPToolContainer:
 
         return mcp_executable
 
-
-##############################################################################
-
-if __name__ == "__main__":
-    from tests.schemas import schema_add
-
-    async def debug():
-        """Test."""
-        
-        container = MCPToolContainer(
-            schemas=[
-                schema_add
-            ],
-        )
-
-        result = await container.tools_raw[schema_add.name_for_llm](
-            a = "5",
-            b = "7",
-        )
-        print("\n ############################# RAW RESULT:\n", result)
-        print("Done")
-
-    ##########################################################################
-    asyncio.run(debug())
-    ##########################################################################
-
-    async def raw_test():
-        """Test."""
-        container = MCPToolContainer(
-            schemas=[
-                schema_add
-            ],
-        )
-
-        result = await container.tools_raw[schema_add.name_for_llm](
-            a = "5",
-            b = "7",
-        )
-        print("\n ############################# RAW RESULT:\n", result)
-        print("Done")
-
-    ##########################################################################
-    asyncio.run(raw_test())
-    ##########################################################################

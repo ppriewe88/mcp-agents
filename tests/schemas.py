@@ -82,3 +82,27 @@ schema_shopping_list = ToolSchema(
         additionalProperties=False,
     ),
 )
+
+schema_structured_pydantic = ToolSchema(
+    server_url="http://127.0.0.1:8000/sse",
+    name_on_server="structured_pydantic",
+    name_for_llm="structured_pydantic",
+    description_for_llm="",
+    args_schema=ToolArgsSchema(
+        properties=[
+        ],
+        additionalProperties=False,
+    ),
+)
+
+schema_structured_dict = ToolSchema(
+    server_url="http://127.0.0.1:8000/sse",
+    name_on_server="structured_dict",
+    name_for_llm="structured_dict",
+    description_for_llm="",
+    args_schema=ToolArgsSchema(
+        properties=[
+        ],
+        additionalProperties=False,
+    ),
+)

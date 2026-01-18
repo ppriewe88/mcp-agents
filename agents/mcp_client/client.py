@@ -244,14 +244,12 @@ class MCPClient(BaseMCPClient):
                 )
                 assert self.session is not None
                 tool_response: CallToolResult = await self.session.call_tool(tool_name, tool_args)
-                print(f"{self.mcp_endpoint}, TOOL RESPONSE SUCCESS/ERROR:")
-                print(f"isError={tool_response.isError}")
+                logger.info(f"[CLIENT] Called tool {tool_name}. Error: {tool_response.isError}")
 
-                ##### first check types
+                ##### first check types. Currently, content allows text only
                 assert isinstance(tool_response.content[0], TextContent)
                 assert tool_response.content[0].type == "text"
                 assert tool_response.content[0].text
-                assert isinstance(tool_response.isError, bool)
                 assert tool_response.structuredContent is None or isinstance(
                     tool_response.structuredContent, dict
                 )
@@ -261,6 +259,7 @@ class MCPClient(BaseMCPClient):
 
             # log success, return
             logger.info("[CLIENT] Successfully called tools on mcp server")
+            await self.close()
 
             return toolcall_results
 
