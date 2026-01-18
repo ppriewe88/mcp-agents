@@ -1,6 +1,6 @@
-Projektübersicht – Agenten-Architektur & Streaming-Ansatz
+Projektübersicht – Agenten-Architektur & Streaming-Ansatz (aktualisiert)
 
-1. Zielbild (High-Level)
+Zielbild (High-Level)
 
 Das Projekt implementiert ein agentenbasiertes Backend auf Basis von LangChain / LangGraph, das:
 
@@ -10,18 +10,21 @@ Agenten sowohl direkt als auch als Tool für andere Agenten einsetzen kann,
 
 echtes Streaming (Token-/Event-basiert) zum Frontend ermöglicht,
 
-und langfristig strukturierte, typisierte Stream-Events (z. B. NDJSON) an das Frontend liefert.
+und strukturierte, typisierte Stream-Events (NDJSON) an das Frontend liefert.
 
-Der Fokus liegt nicht auf schnellen Prototypen, sondern auf:
+Der Fokus liegt auf:
 
 klarer Trennung von Verantwortung,
 
 stabiler Streaming-Semantik,
 
-und kontrollierbarer Agenten-Orchestrierung.
+kontrollierbarer Agenten-Orchestrierung,
 
-1. Zentrale Konzepte & Domänenobjekte
-   2.1 CompleteAgent
+und einer Streaming-Schnittstelle, die sich schrittweise um strukturierte Payloads erweitern lässt, ohne das Protokoll zu brechen.
+
+Zentrale Konzepte & Domänenobjekte
+
+2.1 CompleteAgent
 
 Was es ist:
 Ein reines Konfigurationsobjekt (keine Runtime-Logik).
@@ -58,38 +61,38 @@ Final-Prompt-Overrides
 
 Diese Konfiguration wird später von der Factory in Middleware übersetzt.
 
-2.3 ConfiguredAgent
+2.3 RunnableAgent (vormals “ConfiguredAgent” in der Doku)
 
 Was es ist:
 Der laufzeitfähige Wrapper um einen kompilierten LangGraph-Agenten.
 
 Verantwortung:
 
-hält den kompilierten CompiledStateGraph
+hält den kompilierten CompiledStateGraph,
 
-hält den initial_state (CustomStateShared)
+hält den initial_state (CustomStateShared),
 
-bietet eine einheitliche Runtime-Schnittstelle
+konstruiert aus Frontend-Chatnachrichten LangChain-Threads,
+
+bietet eine einheitliche Runtime-Schnittstelle für non-streaming und streaming,
+
+normalisiert alle Streaming-Ausgaben in NDJSON-Chunks.
 
 Exponierte Methoden:
 
-run(query: str) → synchron / non-streaming
+run(messages: List[ChatMessage]) → non-streaming (ainvoke)
 
-outer_astream(query: str) → Streaming nach außen (Frontend)
+outer_astream(messages: List[ChatMessage]) → Streaming nach außen (Frontend)
 
-Wichtig:
+Wichtig (neuer Stand):
+RunnableAgent kapselt nun die gesamte Streaming-Normalisierung (outer + inner), indem interne Ereignisse (custom + updates) in ein typisiertes Chunk-Modell überführt und anschließend einheitlich serialisiert werden.
 
-ConfiguredAgent kennt nur den äußeren Stream
+Factory-Ansatz
 
-kein inneres Streaming, keine Tool-Hüllen
-
-bewusst einfach gehalten
-
-1. Factory-Ansatz
-   3.1 AgentFactory
+3.1 AgentFactory
 
 Zentrale Aufgabe:
-Erzeugt aus einem CompleteAgent einen lauffähigen ConfiguredAgent.
+Erzeugt aus einem CompleteAgent einen lauffähigen RunnableAgent.
 
 Pipeline:
 
@@ -109,222 +112,266 @@ Toolcall-Limits
 
 Validation
 
-LangChain-Agent bauen
+LangChain/LangGraph-Agent bauen
 
 create_agent(...)
 
-In ConfiguredAgent wrappen
+In RunnableAgent wrappen
 
-Ergebnis:
-Ein vollständig konfigurierter, isolierter Agent mit definierter Runtime-API.
+Ergebnis: vollständig konfigurierter Agent mit definierter Runtime-API
 
-1. Streaming-Architektur (aktueller Stand)
-   4.1 Outer Stream (ConfiguredAgent.outer_astream)
+Streaming-Architektur (aktueller Stand)
+
+4.1 Streaming-Format: NDJSON als Transportprotokoll
+
+Der Endpoint /stream-test liefert eine StreamingResponse mit:
+
+media_type="application/x-ndjson"
+
+jedes Streaming-Element ist ein JSON-Objekt pro Zeile (NDJSON)
+
+der Stream ist robust gegenüber Chunk-Grenzen, da das Frontend zeilenbasiert puffert und JSON.parse pro Zeile ausführt
+
+4.2 Pydantic-Datenmodell: StreamChunk (neu)
+
+Es wurde ein explizites Pydantic-Modell eingeführt, das sowohl inneres als auch äußeres Streaming in eine einheitliche Ereignisrepräsentation überführt:
+
+StreamLevel: OUTER ("outer_agent") vs INNER ("inner_agent")
+
+StreamEvent: START, TOOL_REQUEST, TOOL_RESULT, FINAL, ABORTED
+
+StreamChunk: level, event, agent_name und optionale Felder (tool_name, toolcall_id, data, final_answer, aborted, abortion_reason, etc.)
+
+Damit ist die Grundlage gelegt, pro Ereignis ein strukturierteres Payload zu transportieren (insbesondere bei Tool-Ergebnissen).
+
+4.3 Outer Stream: RunnableAgent.outer_astream (neu strukturiert)
 
 Zweck:
-Streaming zum Frontend.
-
-Verwendet:
+Streaming zum Frontend als NDJSON, basierend auf:
 
 self.agent.astream(
 extended_state,
 stream_mode=["messages", "updates", "custom"]
 )
 
-Verarbeitet:
+Verarbeitungslogik:
 
-updates:
+messages: werden unterdrückt (kein Streaming dieser Low-Level Token-Chunks)
 
-Toolcall requested (AIMessage mit tool_calls)
+custom: repräsentiert weitergereichte StreamChunks aus inneren Agenten (Agent-as-Tool), wird validiert und als StreamChunk verarbeitet
 
-Toolcall result (ToolMessage)
+updates: repräsentiert State-/Middleware-Updates des Outer-Agenten, wird extrahiert, in StreamChunks übersetzt und verarbeitet
 
-Final Answer (validated_agent_output)
+Die Verarbeitung ist in zwei Handler ausgelagert:
 
-custom:
+\_handle_subagent_stream(data): verarbeitet custom-Events (inner agent)
 
-aktuell nur Debug-Prints
+\_handle_agent_stream(data, emitted_toolcall_ids): verarbeitet updates (outer agent)
 
-kommen von inneren Agenten (Agent-as-Tool)
+Beide Handler arbeiten nicht mehr direkt mit untypisierten Strings, sondern erzeugen/validieren StreamChunks und delegieren das Senden an den zentralen Emitter.
 
-Ausgabe:
+4.4 Inner Stream: Agent-as-Tool (innerer Agent) als Producer von StreamChunks
 
-AsyncGenerator[bytes]
+Ein innerer Agent wird als Tool-Hülle eingebunden. Diese Tool-Hülle:
 
-aktuell reines Text-Streaming (text/plain)
+ruft subagent.agent.astream(..., stream_mode=["updates","messages","custom"])
 
-4.2 Agent-as-Tool (innerer Agent)
+verarbeitet nur updates (messages werden unterdrückt)
 
-Umsetzung:
+extrahiert Tool Requests, Tool Results, Final Output, Aborts
 
-Ein ConfiguredAgent wird als Tool via @tool eingebunden.
+erstellt dafür StreamChunk-Objekte (level=INNER, event=...)
 
-Die Tool-Hülle:
+sendet diese über get_stream_writer() als custom-Events in den Outer Stream
 
-ruft inner_agent.agent.astream(...)
+Prinzip:
+Inneres Streaming bleibt in der Tool-Hülle (Orchestrierungsgrenze), aber die Event-Semantik ist nun identisch zum Outer Stream (gleiche StreamChunk-Typen).
 
-verarbeitet nur updates
+4.5 Zentrale Emission: \_emit_chunk_ndjson (neu, zentraler Output-Contract)
 
-filtert auf:
+RunnableAgent besitzt eine zentrale Emissionsmethode:
 
-toolcall_requested
+\_emit_chunk_ndjson(chunk: StreamChunk) -> AsyncGenerator[bytes, None]
 
-toolcall_result
+Diese Methode implementiert die verbindliche Mapping-Logik von (level, event) → NDJSON-Ausgabe:
 
-final_answer
+Aktuelle Regeln (Stand heute):
 
-emittiert diese Events via:
+A) TOOL_RESULT (inner + outer)
 
-writer = get_stream_writer()
-writer({...}) # custom event
+NDJSON: {"level": "<outer_agent|inner_agent>", "type": "tool_results", "data": chunk.data}
 
-Wichtiges Architekturprinzip:
+data ist für Tool-Ergebnisse vorgesehen und soll zukünftig strukturiert (dict/list) sein
 
-Kein inneres Streaming im ConfiguredAgent
+B) FINAL
 
-Inneres Streaming lebt exklusiv in der Tool-Hülle
+OUTER FINAL:
 
-get_stream_writer() funktioniert, da Tool im Runnable-Kontext läuft
+NDJSON: type="text_final"
 
-1. API-Integration (FastAPI)
-   5.1 Aktueller Endpunkt
-   @app.post("/stream-test")
+Ausgabe erfolgt über artificial_stream(text), d. h. die finale Antwort wird in Textfragmenten gestreamt (laufender Effekt im Frontend)
 
-Modi:
+INNER FINAL:
 
-simulated_stream
+NDJSON: type="text_final"
 
-klassischer Run
+Ausgabe erfolgt als ein einzelnes Text-Element (kein artificial_stream), da inneres Final primär als Zwischenstand/Debug dient und im Frontend aktuell nicht in die finale Messagebox geroutet wird
 
-Ausgabe über artificial_stream
+C) START / TOOL_REQUEST / ABORTED
 
-true_stream
+NDJSON: type="text_step"
 
-echtes Streaming
+data ist ein Marker-Text, z. B.:
 
-StreamingResponse(agent.outer_astream(...))
+"[outer_agent] CALLING TOOL: ..."
 
-Medientyp:
+"[inner_agent] ABORTED: ..."
 
-media_type="text/plain"
+D) Uncovered Events
 
-Status:
+\_emit_chunk_ndjson wirft ValueError, um sicherzustellen, dass neue Events explizit abgebildet werden.
 
-stabil
+API-Integration (FastAPI)
 
-geeignet für erste Frontend-Tests
+5.1 Endpunkt /stream-test
 
-noch untypisierte Events
+@app.post("/stream-test")
 
-1. Aktueller Gesamtstatus
-   Was funktioniert:
+nimmt StreamAgentRequest entgegen
+
+assembliert Agent (Factory) bzw. nutzt Test-Agent
+
+liefert StreamingResponse(agent.outer_astream(messages), media_type="application/x-ndjson")
+
+Damit ist das Backend-Protokoll stabil:
+
+Frontend erhält NDJSON und kann anhand von type/level differenziert handeln.
+
+Aktueller Gesamtstatus
+
+Was funktioniert (Stand heute):
 
 Factory & Agent-Zusammenbau
 
-Outer Streaming
+Outer Streaming via NDJSON
 
-Agent-as-Tool
+Agent-as-Tool mit innerem Streaming über get_stream_writer()
 
-Inner Agent streamt Ereignisse live in den Outer Stream
+Konsolidiertes Event-Modell StreamChunk (Pydantic) für inner und outer
 
-custom-Events kommen zuverlässig an
+Ausgelagerte Stream-Handler:
+
+\_handle_subagent_stream: validiert/normalisiert custom-Events zu StreamChunks und emittiert
+
+\_handle_agent_stream: übersetzt updates zu StreamChunks (\_extract_agent_chunks) und emittiert
+
+Zentraler NDJSON-Emitter \_emit_chunk_ndjson mit klaren Regeln:
+
+tool_results als strukturierter Kanal
+
+final_text (outer) als künstlich gestreamte Textfragmente
 
 Was bewusst noch nicht gemacht ist:
 
-Visualisierung innerer Toolcalls im Frontend
+echte strukturierte Tool-Payloads (Tabellenmodell) als stabiles Schema
 
-Typisierung der Stream-Events
+Konsolidierung der inneren vs äußeren FINAL-Typen (derzeit beide type="text_final", Differenzierung erfolgt über level)
 
-NDJSON / SSE-Format
+standardisierte Fehler-/Abbruch-Payloads mit separatem type (z. B. type="error" statt text_step Marker)
 
-Konsolidierte Event-Semantik (outer + inner)
+Sequencing (seq) / Timestamp in Chunks
 
-1. Nächste geplante Schritte (fixiert)
-   Schritt 1 – Custom Events sichtbar machen
+Tests für Chunk-Grenzen und Payload-Validität
 
-custom-Events im outer_astream nicht nur printen
+Mentales Modell (wichtig für Weiterarbeit)
 
-sondern:
+Factory baut Agenten (statisch)
 
-wie outer Toolcalls behandeln
+RunnableAgent führt Agenten aus (Runtime)
 
-Marker ausgeben
+Tool-Hülle ist die Brücke zwischen Agenten (Orchestrierung + inner streaming)
 
-später strukturiert weiterreichen
+Outer Stream ist die einzige Quelle für Frontend-Events
 
-Schritt 2 – Event-Typisierung
+Inner Stream wird gefiltert und als custom-Events weitergereicht, aber semantisch identisch (StreamChunk)
 
-Alle Events, die ans Frontend gehen, werden:
+NDJSON ist der stabile Transport; type + level steuern das Rendering im Frontend
 
-nicht mehr zu String
+Nächste Schritte (Backend) – Fokus: Toolcall data als dict (strukturierte Payloads)
 
-sondern zu strukturierten Objekten
+Ziel:
+Tool-Ergebnisse sollen nicht mehr als String in data landen, sondern als JSON-Objekt (dict/list) mit definiertem Schema, sodass das Frontend Tabellen/Artefakte sicher darstellen kann.
 
-z. B.:
+Schritt 1 – Sicherstellen, dass ToolMessage-Inhalte JSON-serialisierbar sind
 
-{"type": "toolcall_requested", "agent": "inner", "tool": "add"}
+Aktuell: chunk.data = last.content (kann str, list, dict oder komplex sein)
 
-Schritt 3 – Streaming-Format
+Maßnahme:
 
-Umstellung von text/plain auf:
+vor dem Einfüllen in StreamChunk.data prüfen/normalisieren:
 
-NDJSON oder
+wenn Pydantic-Modell: model_dump(mode="json")
 
-Server-Sent Events (SSE)
+wenn LangChain Content-Struktur: in primitives überführen (dict/list/str)
 
-Frontend kann Events differenziert darstellen:
+fallback: str(...) nur, wenn keine Struktur möglich ist
 
-Toolcall gestartet
+Schritt 2 – Tool-Result-Schema definieren (MVP Tabellenmodell)
 
-Toolcall beendet
+Einführen eines einfachen, stabilen Schemas z. B.:
 
-Final Answer
+{"kind": "table", "columns": [...], "rows": [...]}
 
-Abort / Validation
+optional: {"kind": "file_ref", "filename": "...", "mime": "...", "bytes_b64": "..."} (später)
 
-1. Mentales Modell (wichtig für Weiterarbeit)
+StreamChunk.data für TOOL_RESULT enthält dann immer:
 
-Factory baut Agenten → statisch
+dict mit key "kind" und den notwendigen Feldern
 
-ConfiguredAgent führt Agenten aus → Runtime
+Schritt 3 – Pydantic-Union für ToolResultPayload
 
-Tool-Hülle = Brücke zwischen Agenten → Orchestrierung
+data: Optional[Any] ersetzen durch Optional[ToolResultPayload]
 
-Outer Stream = einzige Quelle für Frontend-Events
+ToolResultPayload als Union:
 
-Inner Stream = reduziert, gefiltert, weitergereicht
+TablePayload
 
-Wenn du mir künftig einfach sagst:
+TextPayload
 
-„Wir sind bei dem Agent-as-Tool Streaming-Projekt, Factory + ConfiguredAgent, inner stream über Tool-Hülle, outer_astream streamt ans Frontend – wir wollen jetzt die custom Events typisieren und visualisieren“
+GenericJsonPayload (für Übergangsphase)
 
-########## ERGÄNZUJNG zum Thema Streaming:
-Der Endpoint /stream-test liefert eine StreamingResponse mit media_type="application/x-ndjson" und streamt die Agent-Ausgabe aus outer_astream(...).
+Schritt 4 – Output-Typen weiter stabilisieren
 
-outer_astream normalisiert alle Ausgaben in NDJSON-Chunks (ein JSON-Objekt pro Zeile) und nutzt dafür \_emit_text_ndjson(text, type=...), die aktuell text_step und text_final erzeugt.
+optional: statt type="tool_results" künftig differenzierte types:
 
-In outer_astream werden die unterschiedlichen internen Stream-Quellen (Custom-Events von Subagenten/Nested Agents sowie Outer-Agent-Updates inkl. Toolcall-Marker und Final Output) auf diese Chunk-Typen gemappt:
+type="tool_result_table"
 
-“Arbeitsschritte/Marker” → text_step
+type="tool_result_json"
 
-“Finale Antwort” (validated output) → text_final
+alternativ (MVP): type="tool_results", Differenzierung über data.kind
 
-artificial_stream liefert Text-Fragmente, die im outer_astream konsequent über \_emit_text_ndjson(...) gerahmt werden; dadurch ist die Stream-Ausgabe formal stabil (NDJSON) und später leicht erweiterbar.
+Schritt 5 – Tests
 
-Nächster Ausbaupfad: Einführung eines expliziten Datenmodells (Enum/Union via Pydantic) für Chunk-Typen und Payloads, sodass Tool-Ergebnisse als strukturierte Datenpakete (JSON) vor dem text_final gestreamt werden können, ohne das Streaming-Protokoll zu ändern.
+Unit-/Integrationtests:
 
-To-dos
+TOOL_RESULT enthält nur JSON-serialisierbare Strukturen
 
-\_emit_text_ndjson zu einer generischen \_emit_ndjson(type, data) erweitern und neue Typen (tool_result, tool_request, error, etc.) aufnehmen.
+NDJSON-Format bleibt korrekt (eine Zeile = ein JSON-Objekt)
 
-Pydantic-Modelle/Enums für Chunk-Typen und Payloads definieren (z. B. StreamChunkBase + Union), um Typsicherheit und Validierung zu erhalten.
+Reihenfolge der Chunks entspricht der Ausführungsreihenfolge (custom + updates)
 
-In outer_astream die heutigen Marker (Toolcalls, Subagent-Events) von reinen Texten auf echte strukturierte Payloads (JSON) umstellen.
+Final wird nur vom Outer Agent gestreamt (level=outer_agent)
 
-Tool-Ergebnisse (z. B. Tabellen) als strukturierte Datenpakete (Rows/Columns) in tool_result-Chunks ausgeben.
+To-dos (konsolidiert)
 
-Optionale Sequenznummer (seq) oder Timestamp in die Chunks aufnehmen, falls später explizite Ordnung oder Replays benötigt werden.
+StreamChunk.data für TOOL_RESULT systematisch normalisieren (JSON-serialisierbar erzwingen).
 
-Einheitliche Fehler-/Abbruch-Chunks (aborted, error) definieren und überall konsistent verwenden.
+Einfaches Tabellen-/Artefakt-Schema definieren und in Tools/Tool-Hülle standardisieren.
 
-Tests für NDJSON-Streaming (Chunk-Grenzen, Typen, Reihenfolge) hinzufügen.
+Pydantic-Modelle/Enums für Payloads ergänzen (Union), um Typsicherheit über die gesamte Pipeline zu bekommen.
+
+Optional: seq/timestamp in StreamChunk aufnehmen.
+
+Einheitliche error/aborted Chunk-Typen definieren (nicht nur Marker-Text).
+
+Tests für NDJSON-Streaming (Chunk-Grenzen, Typen, Reihenfolge, Payload-Serialisierbarkeit) hinzufügen.

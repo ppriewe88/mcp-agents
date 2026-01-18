@@ -12,7 +12,7 @@ from langchain_core.tools.structured import StructuredTool
 from langgraph.config import get_stream_writer
 from typing import Optional
 from agents.factory.factory import RunnableAgent
-from agents.models.stream import InnerStreamEvent, InnerStreamChunk
+from agents.models.stream import StreamEvent, StreamChunk, StreamLevel
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -69,15 +69,13 @@ class AgentAsToolContainer:
             emitted_toolcall_ids: Set[str] = set()
             validated_output: Optional[str] = None
 
-            event = InnerStreamEvent.START.value           
-            writer(
-                InnerStreamChunk(
-                    type="subagent",
-                    event = event,
-                    subagent= subagent_name,
+            chunk = StreamChunk(
+                    level=StreamLevel.INNER.value,
+                    event = StreamEvent.START.value,
+                    agent_name= subagent_name,
                     query=user_query
                 ).model_dump(mode="json")
-                )
+            writer(chunk)
 
             extended_state = subagent.initial_state
             extended_state["messages"] = [HumanMessage(user_query)]
@@ -89,15 +87,7 @@ class AgentAsToolContainer:
             ):
                 ########################################### NESTED SUBAGENTS
                 if mode == "custom":
-                    event = InnerStreamEvent.UNDEFINED.value
-                    writer(
-                        InnerStreamChunk(
-                            type="nested_agent",
-                            event = event,
-                            subagent= subagent_name,
-                            data=data
-                        ).model_dump(mode="json")
-                    )
+                    logger.info(f"[SUBAGENT {subagent_name}] Receiving nested stream.")
                     continue
                 
                 ########################################### MESSAGE CHUNKS
@@ -130,49 +120,45 @@ class AgentAsToolContainer:
                                     continue
                                 emitted_toolcall_ids.add(tc_id)
 
-                                event = InnerStreamEvent.TOOL_REQUEST.value
-                                writer(
-                                    InnerStreamChunk(
-                                        type="subagent",
-                                        event = event,
-                                        subagent= subagent_name,
+                                chunk = StreamChunk(
+                                        level=StreamLevel.INNER.value,
+                                        event=StreamEvent.TOOL_REQUEST.value,
+                                        agent_name= subagent_name,
                                         toolcall_id=tc_id,
                                         tool_name=tc.get("name", "unknown_tool")
                                     ).model_dump(mode="json")
-                                )
+                                writer(chunk)
 
                         ####### CASE TOOLCALL RESULT
                         elif isinstance(last, ToolMessage):
-                            event = InnerStreamEvent.TOOL_RESULT.value
-                            writer(
-                                InnerStreamChunk(
-                                    type="subagent",
-                                    event = event,
-                                    subagent= subagent_name,
+                        
+                            chunk = StreamChunk(
+                                    level = StreamLevel.INNER.value,
+                                    event = StreamEvent.TOOL_RESULT.value,
+                                    agent_name= subagent_name,
                                     tool_name=last.name,
                                     data = last.content
                                 ).model_dump(mode="json")
-                            )
+                            writer(chunk)
 
                     ####### CASE FINAL ANSWER / ABORT (final update made at end)
                     
-                    #### UPDATES OF FINAL ATTRIBUTES
                     output_aborted = update.get("agent_output_aborted")
                     validated_output = update.get("validated_agent_output")
 
                     ## ABORT wins immediately
                     if output_aborted:
                         output_abortion_reason = update.get("agent_output_abortion_reason") or "aborted!"
-                        event = InnerStreamEvent.ABORTED.value
-                        writer(
-                            InnerStreamChunk(
-                                type="subagent",
-                                event = event,
-                                subagent= subagent_name,
+    
+                        chunk = StreamChunk(
+                                level = StreamLevel.INNER.value,
+                                event = StreamEvent.ABORTED.value,
+                                agent_name= subagent_name,
                                 aborted=True,
                                 abortion_reason=output_abortion_reason
                             ).model_dump(mode="json")
-                        )
+                        writer(chunk)
+
                         return f"[ABORTED: {output_abortion_reason}]"
                     
                     if validated_output is None:
@@ -180,15 +166,15 @@ class AgentAsToolContainer:
                     
                     ## final answer
                     assert isinstance(validated_output, str) and validated_output
-                    event = InnerStreamEvent.FINAL.value
-                    writer(
-                        InnerStreamChunk(
-                            type="subagent",
-                            event = event,
-                            subagent= subagent_name,
+                    
+                    chunk =  StreamChunk(
+                            level = StreamLevel.INNER.value,
+                            event =  StreamEvent.FINAL.value,
+                            agent_name= subagent_name,
                             final_answer=validated_output
                         ).model_dump(mode="json")
-                    )
+                    writer(chunk)
+
                     return validated_output
 
             #### FALLBACK 

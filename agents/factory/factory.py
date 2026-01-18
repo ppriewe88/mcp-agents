@@ -1,5 +1,5 @@
 import logging
-from typing import Any, AsyncGenerator, List, Optional, Sequence, cast
+from typing import Any, AsyncGenerator, List, Dict, Optional, Sequence, cast
 
 from dotenv import load_dotenv
 from langchain.agents import create_agent
@@ -31,7 +31,7 @@ from agents.models.agents import (
     CompleteAgentConfig,
     PromptMarkers,
 )
-from agents.models.stream import InnerStreamChunk, InnerStreamEvent
+from agents.models.stream import StreamChunk, StreamEvent, StreamLevel
 from agents.models.api import ChatMessage, ChatRole
 from agents.models.extended_state import CustomStateShared
 from agents.models.tools import ToolSchema
@@ -105,7 +105,6 @@ class RunnableAgent:
         extended_state["query"] = messages[-1].content
 
         emitted_toolcall_ids: set[str] = set()
-        emitted_final = False
 
         async for stream_mode, data in self.agent.astream(
             extended_state,
@@ -113,86 +112,10 @@ class RunnableAgent:
         ):
             ########################################### CUSTOM EVENTS FROM SUBAGENTS (SUBTHREAD)
             if stream_mode == "custom":
-                # check chunk type
-                chunk: Optional[InnerStreamChunk] = None
-                try:
-                    chunk = InnerStreamChunk.model_validate(data)
-                except Exception:
-                    chunk = None
-                
-                if chunk is None: 
-                    yield self._emit_text_ndjson(f"-------------- [CUSTOM STREAM UNKNOWN EVENT]: {data}")
-                    yield self._emit_text_ndjson("\n\n")
-                    continue
-                
-                ############## handle subagent/nested_agent chunks explicitly; others are debugged above
-                match (chunk.type, chunk.event):
-
-                    ########################## START 
-                    case ("subagent", InnerStreamEvent.START) | ("nested_agent", InnerStreamEvent.START):
-                        marker = f"[SUBAGENT START: {chunk.subagent}....]"
-                        # async for s in artificial_stream(marker, pause=0.04):
-                        #     yield self._emit_text_ndjson(s)
-                        yield self._emit_text_ndjson(marker)
-                        yield self._emit_text_ndjson("\n\n")
-
-                    ########################## TOOL REQUEST
-                    case ("subagent", InnerStreamEvent.TOOL_REQUEST) | ("nested_agent", InnerStreamEvent.TOOL_REQUEST):
-                        tool_name = chunk.tool_name or "unknown_tool"
-                        toolcall_id = chunk.toolcall_id
-                        marker = (
-                            f"[SUBAGENT CALLING TOOL: {chunk.subagent}::{tool_name}"
-                            + (f" (id={toolcall_id})" if toolcall_id else "")
-                            + "....]"
-                        )
-                        # async for s in artificial_stream(marker, pause=0.04):
-                        #     yield self._emit_text_ndjson(s)
-                        yield self._emit_text_ndjson(marker)
-                        yield self._emit_text_ndjson("\n\n")
-
-                    ########################## TOOL RESULT
-                    case ("subagent", InnerStreamEvent.TOOL_RESULT) | ("nested_agent", InnerStreamEvent.TOOL_RESULT):
-                        tool_name = chunk.tool_name or "unknown_tool"
-                        data = chunk.data
-                        marker = f"[SUBAGENT TOOLCALL DONE: {chunk.subagent}::{tool_name}. DATA: {data}]"
-                        # async for s in artificial_stream(marker, pause=0.04):
-                        #     yield self._emit_text_ndjson(s)
-                        yield self._emit_text_ndjson(marker)
-                        yield self._emit_text_ndjson("\n\n")
-
-                    ########################## FINAL ANSWER
-                    case ("subagent", InnerStreamEvent.FINAL) | ("nested_agent", InnerStreamEvent.FINAL):
-                        # IMPORTANT: do NOT return here (outer final answer comes from outer validated output)
-                        text = chunk.final_answer
-                        if isinstance(text, str) and text:
-                            header = f"[SUBAGENT FINAL: {chunk.subagent}]"
-                            async for s in artificial_stream(header, pause=0.02):
-                                yield self._emit_text_ndjson(s)
-                            yield self._emit_text_ndjson("\n\n")
-                            async for s in artificial_stream(text, pause=0.02):
-                                yield self._emit_text_ndjson(s)
-                            yield self._emit_text_ndjson("\n\n")
-                        else:
-                            yield self._emit_text_ndjson(f"[SUBAGENT FINAL: {chunk.subagent} (no text)]")
-                            yield self._emit_text_ndjson("\n\n")
-
-                    ########################## ABORTION
-                    case ("subagent", InnerStreamEvent.ABORTED) | ("nested_agent", InnerStreamEvent.ABORTED):
-                        reason = chunk.abortion_reason or "aborted!"
-                        yield self._emit_text_ndjson(f"[INNER AGENT ABORTED: {reason}]")
-                        return
-
-                    ########################## CUSTOM
-                    case ("subagent", InnerStreamEvent.CUSTOM) | ("nested_agent", InnerStreamEvent.CUSTOM):
-                        yield self._emit_text_ndjson(f"-------------- [NESTED SUBAGENT CUSTOM:{chunk.subagent}]: {chunk.data}")
-                        yield self._emit_text_ndjson("\n\n")
-
-                    ########################## FALLBACK
-                    case _:
-                        yield self._emit_text_ndjson(f"-------------- [SUBAGENT UNKNOWN EVENT:{chunk.subagent}]: {data}")
-                        yield self._emit_text_ndjson("\n\n")
-
-                continue  # important: do not fall into updates logic!
+        
+                async for part in self._handle_subagent_stream(data):
+                    yield part
+                continue
             
             ########################################### OUTER AGENT MESSAGE CHUNKS (SUPPRESS)
             if stream_mode == "messages":
@@ -200,73 +123,11 @@ class RunnableAgent:
 
             ########################################### OUTER AGENT MESSAGE UPDATES (HIGHEST THREAD)
             assert stream_mode == "updates"
-            for _source, update in data.items():  # type: ignore[union-attr]
-                if not isinstance(update, dict):
-                    continue
-
-                ########### CASE VALIDATOR ABORT
-                if update.get("agent_output_aborted") is True:
-                    reason = (
-                        update.get("agent_output_abortion_reason")
-                        or "validation rejected"
-                    )
-                    yield self._emit_text_ndjson(f"[ABORTED: {reason}]")
-                    return
-
-                ########### CASE NEW MESSAGE
-                msgs = update.get("messages")
-                if msgs:
-                    last: AnyMessage = msgs[-1]
-
-                    ###### CASE TOOLCALL REQUESTED
-                    if isinstance(last, AIMessage) and getattr(
-                        last, "tool_calls", None
-                    ):
-                        for tc in last.tool_calls:
-                            tc_id = (
-                                tc.get("id")
-                                or f"{tc.get('name')}::{hash(str(tc.get('args')))}"
-                            )
-                            if tc_id in emitted_toolcall_ids:
-                                continue
-                            emitted_toolcall_ids.add(tc_id)
-                            tool_name = tc.get("name", "unknown_tool")
-                            marker = f"[+++ CALLING TOOL:{tool_name}....]"
-                            # async for s in artificial_stream(marker, pause=0.04):
-                            #     yield self._emit_text_ndjson(s)
-                            yield self._emit_text_ndjson(marker)
-                            yield self._emit_text_ndjson("\n\n")
-
-                    ###### CASE TOOLCALL MADE
-                    elif isinstance(last, ToolMessage):
-                        marker = f"[+++ TOOLCALL DONE: {last.name}....]"
-                        # async for s in artificial_stream(marker, pause=0.04):
-                            #     yield self._emit_text_ndjson(s)
-                        yield self._emit_text_ndjson(marker)
-                        yield self._emit_text_ndjson("\n\n")
-
-                ########### CASE NOT FINAL ANSWER YET
-                validated: Optional[Any] = update.get("validated_agent_output")
-                if validated is None or emitted_final:
-                    continue
-
-                ########### CASE FINAL ANSWER
-                text: Optional[str] = None
-                if isinstance(validated, AIMessage):
-                    if isinstance(validated.content, str):
-                        text = validated.content
-                    else:
-                        text = str(validated.content)
-                elif isinstance(validated, str):
-                    text = validated
-                else:
-                    text = str(validated)
-
-                if text:
-                    emitted_final = True
-                    async for s in artificial_stream(text, pause=0.04):
-                        yield self._emit_text_ndjson(s, type = "text_final")
-                    return
+            async for b in self._handle_agent_stream(
+                    data,
+                    emitted_toolcall_ids,
+                ):
+                    yield b
 
     def _construct_thread(
             self, 
@@ -286,17 +147,181 @@ class RunnableAgent:
                     raise ValueError(f"Unsupported role: {message.role}")
         return thread
 
-    @staticmethod
-    def _emit_text_ndjson(text: str, type: str = "text_step") -> bytes:
-        """Helper to dump text into json typed chunk."""
-        match type:
-            case "text_step":
-                return (json.dumps({"type": "text_step", "data":text}, ensure_ascii=False) + "\n").encode("utf-8")
-            case "text_final":
-                return (json.dumps({"type": "text_final", "data":text}, ensure_ascii=False) + "\n").encode("utf-8")
-            case _:
-                raise ValueError("Wrong chunk type!")
+    async def _handle_subagent_stream(
+        self,
+        data,
+    ) -> AsyncGenerator[bytes, None]:
+        """
+        Handle 'custom' stream_mode events (inner/subagent stream forwarded to outer).
+        Emits using the central chunk emitter.
+        """
+        chunk: Optional[StreamChunk] = None
+        try:
+            chunk = StreamChunk.model_validate(data)
+        except Exception:
+            chunk = StreamChunk(
+                level=StreamLevel.OUTER.value,
+                event=StreamEvent.ABORTED.value,              
+                agent_name=self.name,
+                info="[STREAM] Received custom chunk with invalid model!",
+                aborted=True,
+                abortion_reason="invalid custom chunk model",
+                data=data,
+            )
+
+        if chunk is None:
+            yield self._emit_chunk_ndjson(chunk)
+            return
         
+        async for b in self._emit_chunk_ndjson(chunk):
+            yield b
+
+    async def _handle_agent_stream(
+        self,
+        data: Dict,
+        emitted_toolcall_ids,
+    ):
+        for _source, update in data.items():  # type: ignore[union-attr]
+            if not isinstance(update, dict):
+                continue
+            
+            chunks = self._extract_agent_chunks(
+                update, 
+                emitted_toolcall_ids=emitted_toolcall_ids
+                )
+
+            for chunk in chunks:
+
+                async for b in self._emit_chunk_ndjson(chunk):
+                    yield b
+
+                # IMPORTANT: keep current control flow
+                if chunk.event in (StreamEvent.ABORTED.value, StreamEvent.FINAL.value):
+                    return
+            
+    def _extract_agent_chunks(
+            self,
+            update: dict[str, Any],
+            emitted_toolcall_ids:set[str],
+    ) -> List[StreamChunk]:
+        """
+        Translate a single outer-agent update dict into 0..n StreamChunk objects.
+        Keeps the same semantics as the current inline logic.
+        """
+        chunks: List[StreamChunk] = []
+
+         ########### CASE VALIDATOR ABORT
+        if update.get("agent_output_aborted") is True:
+            reason = update.get("agent_output_abortion_reason") or "validation rejected"
+            chunks.append(
+                StreamChunk(
+                    level=StreamLevel.OUTER.value,
+                    event=StreamEvent.ABORTED.value,
+                    agent_name=self.name,
+                    aborted=True,
+                    abortion_reason=reason,
+                )
+            )
+            return chunks
+
+        ########### CASE NEW MESSAGE: TOOLCALL REQUEST & TOOLCALL RESULTS
+        msgs = update.get("messages")
+        if msgs:
+            last: AnyMessage = msgs[-1]
+
+            ##### TOOL_REQUEST (possibly multiple)
+            if isinstance(last, AIMessage) and getattr(last, "tool_calls", None):
+                for tc in last.tool_calls:
+                    tc_id = tc.get("id") or f"{tc.get('name')}::{hash(str(tc.get('args')))}"
+                    if tc_id in emitted_toolcall_ids:
+                        continue
+                    emitted_toolcall_ids.add(tc_id)
+
+                    chunks.append(
+                        StreamChunk(
+                            level=StreamLevel.OUTER.value,
+                            event=StreamEvent.TOOL_REQUEST.value,
+                            agent_name=self.name,
+                            toolcall_id=tc_id,
+                            tool_name=tc.get("name", "unknown_tool"),
+                            data=tc.get("args"),  # optional; keep for later
+                        )
+                    )
+
+            ##### TOOL_RESULT (single)
+            elif isinstance(last, ToolMessage):
+                chunks.append(
+                    StreamChunk(
+                        level=StreamLevel.OUTER.value,
+                        event=StreamEvent.TOOL_RESULT.value,
+                        agent_name=self.name,
+                        tool_name=last.name,
+                        data=last.content,
+                    )
+                )
+
+        ########### CASE FINAL ANSWER
+        validated = update.get("validated_agent_output")
+        if validated is not None:
+            if isinstance(validated, AIMessage):
+                text = validated.content if isinstance(validated.content, str) else str(validated.content)
+            else:
+                text = str(validated)
+
+            if text:
+                chunks.append(
+                    StreamChunk(
+                        level=StreamLevel.OUTER.value,
+                        event=StreamEvent.FINAL.value,
+                        agent_name=self.name,
+                        final_answer=text,
+                    )
+                )
+
+        return chunks
+
+    async def _emit_chunk_ndjson(self, chunk: StreamChunk) -> AsyncGenerator[bytes, None]:
+        """Emit one StreamChunk as NDJSON records."""
+    
+        if chunk.event == StreamEvent.TOOL_RESULT.value:
+            if chunk.level == StreamLevel.OUTER.value:
+                yield (json.dumps({"level": chunk.level, "type":"tool_results", "data": chunk.data}, ensure_ascii=False) + "\n").encode("utf-8")
+                return
+            if chunk.level == StreamLevel.INNER.value:
+                yield (json.dumps({"level": chunk.level, "type":"tool_results", "data": chunk.data}, ensure_ascii=False) + "\n").encode("utf-8")
+                return
+
+        if chunk.event == StreamEvent.FINAL.value:
+            text = chunk.final_answer or ""
+            if not text:
+                return
+            
+            if chunk.level == StreamLevel.OUTER.value:
+                async for part in artificial_stream(text, pause=0.04):
+                    yield (json.dumps({"level": chunk.level, "type":"text_final", "data": part}, ensure_ascii=False) + "\n").encode("utf-8")
+                return
+            
+            if chunk.level == StreamLevel.INNER.value:
+                yield (json.dumps({"level": chunk.level, "type":"text_final", "data": text}, ensure_ascii=False) + "\n").encode("utf-8")
+                return
+
+        marker: str
+        if chunk.event == StreamEvent.START.value:
+            marker = f"[{chunk.level}] START: {chunk.agent_name}...."
+
+        elif chunk.event == StreamEvent.TOOL_REQUEST.value:
+            tool = chunk.tool_name or "unknown_tool"
+            tcid = f" (id={chunk.toolcall_id})" if chunk.toolcall_id else ""
+            marker = f"[{chunk.level}] CALLING TOOL: {chunk.agent_name}::{tool}{tcid}...."
+
+        elif chunk.event == StreamEvent.ABORTED.value:
+            reason = chunk.abortion_reason or "aborted!"
+            marker = f"[{chunk.level}] ABORTED: {chunk.agent_name}: {reason}"
+
+        else: raise ValueError("[STREAM] Uncovered event!")
+
+        yield (json.dumps({"level": chunk.level, "type":"text_step", "data": marker}, ensure_ascii=False) + "\n").encode("utf-8")
+
 class AgentFactory:
     """Provides a unified mechanism for constructing fully configured agents.
 
