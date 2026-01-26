@@ -1,9 +1,9 @@
 from typing import AsyncGenerator
 import asyncio
 
-async def artificial_stream(answer: str, pause:float) -> AsyncGenerator[bytes, None]:
+async def artificial_stream(answer: str, pause:float) -> AsyncGenerator[str, None]:
     words = answer.split()
     for i, w in enumerate(words):
         chunk = w if i == len(words) - 1 else f"{w} "
-        yield chunk.encode("utf-8")
+        yield chunk
         await asyncio.sleep(pause)

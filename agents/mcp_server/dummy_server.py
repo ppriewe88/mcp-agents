@@ -3,11 +3,11 @@ run with: mcp dev server.py
 """
 import logging
 import os
-from typing import Annotated
+from typing import Annotated, Dict, List
 
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
-from pydantic import Field
+from pydantic import Field, BaseModel
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -24,7 +24,6 @@ mcp = FastMCP(
     stateless_http=True,
 )
 
-# Add a simple calculator tool
 @mcp.tool(
     name="add_numbers",
     description="""Adds two integers and returns their sum.
@@ -54,6 +53,45 @@ def shopping_list(name:str) -> list:
     """say hi back"""
     return ["sugar", "flour", "butter"]
 
+
+
+##################################
+class Structured(BaseModel):
+    data_dict:Dict
+    data_list:List
+
+@mcp.tool(
+    name="structured_pydantic",
+    description="""Test for structured output.""")
+async def structured() -> Structured:
+    """Add two numbers together"""
+    result = Structured(
+        data_dict={
+            "name":"Patrick",
+            "age":"37"
+                    },
+        data_list=[
+            "287", "37"
+        ]
+    )
+    return result
+
+@mcp.tool(
+    name="structured_dict",
+    description="""Test for structured output.""")
+def structured() -> Dict:
+    """Add two numbers together"""
+    result: Dict = {
+        "1": {
+        "name":"patrick",
+        "age": "37"
+        },
+        "2": {
+        "name":"anika",
+        "age": "36"
+        }
+    }
+    return result
 
 # Run the server
 if __name__ == "__main__":

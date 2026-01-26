@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Literal, List
+from typing import List
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
@@ -8,7 +8,6 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from agents.api.utils import assemble_agent, use_test_agent
 from agents.factory.factory import RunnableAgent
-from agents.factory.utils import artificial_stream
 from agents.mcp_client.client import MCPClient
 from agents.models.api import GetToolsRequest, StreamAgentRequest, ChatMessage
 
@@ -58,7 +57,7 @@ async def stream_test(payload: StreamAgentRequest):
             agent = assemble_agent(payload)
         stream = StreamingResponse(
             agent.outer_astream(messages),
-            media_type="text/plain",
+            media_type="application/x-ndjson",
         )
     except Exception as error:
         stream = "Ooops, something went wrong in the backend...!"

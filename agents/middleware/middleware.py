@@ -19,9 +19,6 @@ from langgraph.graph.state import CompiledStateGraph
 from langgraph.runtime import Runtime
 
 from agents import configure_logging
-from agents.middleware.prompts import (
-    SYSTEM_PROMPT_VALIDATOR_USABILITY,
-)
 from agents.middleware.utils import (
     DetectedStatus,
     detect_loop_status,
