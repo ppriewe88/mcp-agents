@@ -1,5 +1,6 @@
+import json
 import logging
-from typing import Any, AsyncGenerator, List, Dict, Optional, Sequence, cast
+from typing import Any, AsyncGenerator, Dict, List, Optional, Sequence, cast
 
 from dotenv import load_dotenv
 from langchain.agents import create_agent
@@ -8,12 +9,12 @@ from langchain.messages import (
     AIMessage,
     AnyMessage,
     HumanMessage,
+    SystemMessage,
     ToolMessage,
-    SystemMessage
 )
 from langchain_core.tools.structured import StructuredTool
 from langgraph.graph.state import CompiledStateGraph, StateT
-import json
+
 from agents.containers.mcp_tools import MCPToolContainer
 from agents.factory.utils import artificial_stream
 from agents.llm.client import model
@@ -31,9 +32,9 @@ from agents.models.agents import (
     CompleteAgentConfig,
     PromptMarkers,
 )
-from agents.models.stream import StreamChunk, StreamEvent, StreamLevel
 from agents.models.api import ChatMessage, ChatRole
 from agents.models.extended_state import CustomStateShared
+from agents.models.stream import StreamChunk, StreamEvent, StreamLevel
 from agents.models.tools import ToolSchema
 
 logger = logging.getLogger(__name__)
@@ -88,7 +89,7 @@ class RunnableAgent:
     async def run(self, messages: List[ChatMessage]) -> str | dict[str, Any]:
         """Executes the configured agent using a message."""
         extended_state = self.initial_state
-        extended_state["messages"] = self._construct_thread(messages)
+        extended_state["messages"] = self._construct_thread(messages)  # type: ignore[typeddict-item]
         extended_state["query"] = messages[-1].content
 
         result = await self.agent.ainvoke(extended_state)
@@ -101,7 +102,7 @@ class RunnableAgent:
             ) -> AsyncGenerator[bytes, None]:
         """Executes the configured agent using a message."""
         extended_state = self.initial_state
-        extended_state["messages"] = self._construct_thread(messages)
+        extended_state["messages"] = self._construct_thread(messages)  # type: ignore[typeddict-item]
         extended_state["query"] = messages[-1].content
 
         emitted_toolcall_ids: set[str] = set()
@@ -123,6 +124,7 @@ class RunnableAgent:
 
             ########################################### OUTER AGENT MESSAGE UPDATES (HIGHEST THREAD)
             assert stream_mode == "updates"
+            assert isinstance(data, dict)
             async for b in self._handle_agent_stream(
                     data,
                     emitted_toolcall_ids,
@@ -160,8 +162,8 @@ class RunnableAgent:
             chunk = StreamChunk.model_validate(data)
         except Exception:
             chunk = StreamChunk(
-                level=StreamLevel.OUTER.value,
-                event=StreamEvent.ABORTED.value,              
+                level=StreamLevel.OUTER.value,  # type: ignore[arg-type]
+                event=StreamEvent.ABORTED.value,  # type: ignore[arg-type]
                 agent_name=self.name,
                 info="[STREAM] Received custom chunk with invalid model!",
                 aborted=True,
@@ -215,8 +217,8 @@ class RunnableAgent:
             reason = update.get("agent_output_abortion_reason") or "validation rejected"
             chunks.append(
                 StreamChunk(
-                    level=StreamLevel.OUTER.value,
-                    event=StreamEvent.ABORTED.value,
+                    level=StreamLevel.OUTER.value,  # type: ignore[arg-type]
+                    event=StreamEvent.ABORTED.value,  # type: ignore[arg-type]
                     agent_name=self.name,
                     aborted=True,
                     abortion_reason=reason,
@@ -239,8 +241,8 @@ class RunnableAgent:
 
                     chunks.append(
                         StreamChunk(
-                            level=StreamLevel.OUTER.value,
-                            event=StreamEvent.TOOL_REQUEST.value,
+                            level=StreamLevel.OUTER.value,  # type: ignore[arg-type]
+                            event=StreamEvent.TOOL_REQUEST.value,  # type: ignore[arg-type]
                             agent_name=self.name,
                             toolcall_id=tc_id,
                             tool_name=tc.get("name", "unknown_tool"),
@@ -252,8 +254,8 @@ class RunnableAgent:
             elif isinstance(last, ToolMessage):
                 chunks.append(
                     StreamChunk(
-                        level=StreamLevel.OUTER.value,
-                        event=StreamEvent.TOOL_RESULT.value,
+                        level=StreamLevel.OUTER.value,  # type: ignore[arg-type]
+                        event=StreamEvent.TOOL_RESULT.value,  # type: ignore[arg-type]
                         agent_name=self.name,
                         tool_name=last.name,
                         data=last.content,
@@ -271,8 +273,8 @@ class RunnableAgent:
             if text:
                 chunks.append(
                     StreamChunk(
-                        level=StreamLevel.OUTER.value,
-                        event=StreamEvent.FINAL.value,
+                        level=StreamLevel.OUTER.value,  # type: ignore[arg-type]
+                        event=StreamEvent.FINAL.value,  # type: ignore[arg-type]
                         agent_name=self.name,
                         final_answer=text,
                     )
@@ -318,7 +320,8 @@ class RunnableAgent:
             reason = chunk.abortion_reason or "aborted!"
             marker = f"[{chunk.level}] ABORTED: {chunk.agent_name}: {reason}"
 
-        else: raise ValueError("[STREAM] Uncovered event!")
+        else:
+            raise ValueError("[STREAM] Uncovered event!")
 
         yield (json.dumps({"level": chunk.level, "type":"text_step", "data": marker}, ensure_ascii=False) + "\n").encode("utf-8")
 

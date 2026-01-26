@@ -7,7 +7,7 @@ from typing import Annotated, Dict, List
 
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
-from pydantic import Field, BaseModel
+from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -63,7 +63,7 @@ class Structured(BaseModel):
 @mcp.tool(
     name="structured_pydantic",
     description="""Test for structured output.""")
-async def structured() -> Structured:
+async def structured_pydantic() -> Structured:
     """Add two numbers together"""
     result = Structured(
         data_dict={
@@ -79,7 +79,7 @@ async def structured() -> Structured:
 @mcp.tool(
     name="structured_dict",
     description="""Test for structured output.""")
-def structured() -> Dict:
+def structured_dict() -> Dict:
     """Add two numbers together"""
     result: Dict = {
         "1": {
